@@ -1,0 +1,19 @@
+package org.example.classAssignment.pojo;
+
+import lombok.Data;
+
+@Data
+public class Assignment {
+    String accountId;
+    String id;
+    String assignmentId;
+    String title;
+    String deadline;
+    String assignmentType;
+    String content;
+    Integer totalScore;
+    String submit;
+    String correct;
+    Integer score;
+    String submitContent;
+}
