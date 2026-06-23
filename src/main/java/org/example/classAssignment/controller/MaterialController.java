@@ -26,8 +26,8 @@ public class MaterialController {
     private MaterialService materialService;
 
     @GetMapping("/folders")
-    public MaterialResult listFolders(@PathVariable String courseId, @RequestParam String accountId) {
-        return materialService.listFolders(courseId, accountId);
+    public MaterialResult listFolders(@PathVariable String courseId, @RequestParam String accountId, @RequestParam String category) {
+        return materialService.listFolders(courseId, accountId, category);
     }
 
     @PostMapping("/folders")
@@ -46,18 +46,19 @@ public class MaterialController {
     }
 
     @GetMapping("/attachments")
-    public MaterialResult listAttachments(@PathVariable String courseId, @RequestParam String accountId) {
-        return materialService.listAttachments(courseId, accountId);
+    public MaterialResult listAttachments(@PathVariable String courseId, @RequestParam String accountId, @RequestParam String category) {
+        return materialService.listAttachments(courseId, accountId, category);
     }
 
     @PostMapping("/attachments")
     public MaterialResult uploadAttachment(
             @PathVariable String courseId,
             @RequestParam String accountId,
+            @RequestParam String category,
             @RequestParam(required = false) Long folderId,
             @RequestParam("file") MultipartFile file
     ) {
-        return materialService.uploadAttachment(courseId, accountId, folderId, file);
+        return materialService.uploadAttachment(courseId, accountId, category, folderId, file);
     }
 
     @GetMapping("/attachments/{attachmentId}/download")
@@ -79,8 +80,8 @@ public class MaterialController {
     }
 
     @GetMapping("/links")
-    public MaterialResult listLinks(@PathVariable String courseId, @RequestParam String accountId) {
-        return materialService.listLinks(courseId, accountId);
+    public MaterialResult listLinks(@PathVariable String courseId, @RequestParam String accountId, @RequestParam String category) {
+        return materialService.listLinks(courseId, accountId, category);
     }
 
     @PostMapping("/links")

@@ -5,6 +5,7 @@ import org.example.classAssignment.pojo.Account;
 import org.example.classAssignment.pojo.CreateFolderRequest;
 import org.example.classAssignment.pojo.CreateLinkRequest;
 import org.example.classAssignment.pojo.MaterialAttachment;
+import org.example.classAssignment.pojo.MaterialCategory;
 import org.example.classAssignment.pojo.MaterialFolder;
 import org.example.classAssignment.pojo.MaterialLink;
 import org.example.classAssignment.pojo.MaterialResult;
@@ -47,11 +48,12 @@ public class MaterialService {
     @Value("${materials.storage-path:uploads/materials}")
     private String storagePath;
 
-    public MaterialResult listFolders(String courseId, String accountId) {
+    public MaterialResult listFolders(String courseId, String accountId, String category) {
         MaterialResult result = new MaterialResult();
         try {
             assertCourseReadable(accountId, courseId);
-            List<MaterialFolder> folders = materialMapper.findFoldersByCourseId(courseId);
+            String normalizedCategory = MaterialCategory.normalize(category);
+            List<MaterialFolder> folders = materialMapper.findFoldersByCourseId(courseId, normalizedCategory);
             result.setFolders(folders);
             result.setSuccess(true);
             result.setMessage("资料文件夹获取成功");
@@ -66,6 +68,7 @@ public class MaterialService {
         MaterialResult result = new MaterialResult();
         try {
             assertCourseTeacher(request.getAccountId(), courseId);
+            String normalizedCategory = MaterialCategory.normalize(request.getCategory());
             if (request.getName() == null || request.getName().trim().isEmpty()) {
                 throw new IllegalArgumentException("文件夹名称不能为空");
             }
@@ -75,10 +78,12 @@ public class MaterialService {
                 if (parent == null) {
                     throw new IllegalArgumentException("父文件夹不存在");
                 }
+                assertFolderCategory(parent, normalizedCategory);
             }
 
             MaterialFolder folder = new MaterialFolder();
             folder.setCourseId(courseId);
+            folder.setCategory(normalizedCategory);
             folder.setParentId(parentId);
             folder.setName(request.getName().trim());
             folder.setCreatedBy(request.getAccountId());
@@ -113,8 +118,9 @@ public class MaterialService {
                 if (newParent == null) {
                     throw new IllegalArgumentException("新的父文件夹不存在");
                 }
+                assertFolderCategory(newParent, folder.getCategory());
 
-                List<MaterialFolder> all = materialMapper.findFoldersByCourseId(courseId);
+                List<MaterialFolder> all = materialMapper.findFoldersByCourseId(courseId, folder.getCategory());
                 Set<Long> descendants = collectDescendantFolderIds(all, folderId);
                 if (descendants.contains(newParentId)) {
                     throw new IllegalArgumentException("不能移动到子文件夹中");
@@ -145,7 +151,7 @@ public class MaterialService {
                 throw new IllegalArgumentException("文件夹不存在");
             }
 
-            List<MaterialFolder> allFolders = materialMapper.findFoldersByCourseId(courseId);
+            List<MaterialFolder> allFolders = materialMapper.findFoldersByCourseId(courseId, folder.getCategory());
             List<Long> deleteOrder = collectPostOrderFolderIds(allFolders, folderId);
 
             for (Long id : deleteOrder) {
@@ -162,11 +168,12 @@ public class MaterialService {
         return result;
     }
 
-    public MaterialResult listAttachments(String courseId, String accountId) {
+    public MaterialResult listAttachments(String courseId, String accountId, String category) {
         MaterialResult result = new MaterialResult();
         try {
             assertCourseReadable(accountId, courseId);
-            List<MaterialAttachment> attachments = materialMapper.findAttachmentsByCourseId(courseId);
+            String normalizedCategory = MaterialCategory.normalize(category);
+            List<MaterialAttachment> attachments = materialMapper.findAttachmentsByCourseId(courseId, normalizedCategory);
             result.setAttachments(attachments);
             result.setSuccess(true);
             result.setMessage("附件资料获取成功");
@@ -177,10 +184,11 @@ public class MaterialService {
         return result;
     }
 
-    public MaterialResult uploadAttachment(String courseId, String accountId, Long folderId, MultipartFile file) {
+    public MaterialResult uploadAttachment(String courseId, String accountId, String category, Long folderId, MultipartFile file) {
         MaterialResult result = new MaterialResult();
         try {
             assertCourseTeacher(accountId, courseId);
+            String normalizedCategory = MaterialCategory.normalize(category);
             if (file == null || file.isEmpty()) {
                 throw new IllegalArgumentException("文件不能为空");
             }
@@ -189,14 +197,15 @@ public class MaterialService {
                 if (folder == null) {
                     throw new IllegalArgumentException("文件夹不存在");
                 }
+                assertFolderCategory(folder, normalizedCategory);
             }
 
             String originalName = sanitizeFileName(Objects.requireNonNullElse(file.getOriginalFilename(), "file"));
             String storedName = UUID.randomUUID() + "_" + originalName;
-            String relativePath = courseId + "/" + storedName;
+            String relativePath = courseId + "/" + normalizedCategory + "/" + storedName;
 
             Path root = getStorageRoot();
-            Path courseDir = root.resolve(courseId).normalize();
+            Path courseDir = root.resolve(courseId).resolve(normalizedCategory).normalize();
             Files.createDirectories(courseDir);
 
             Path target = courseDir.resolve(storedName).normalize();
@@ -207,6 +216,7 @@ public class MaterialService {
 
             MaterialAttachment attachment = new MaterialAttachment();
             attachment.setCourseId(courseId);
+            attachment.setCategory(normalizedCategory);
             attachment.setFolderId(folderId);
             attachment.setOriginalName(originalName);
             attachment.setStoredName(storedName);
@@ -275,11 +285,12 @@ public class MaterialService {
                 .body(resource);
     }
 
-    public MaterialResult listLinks(String courseId, String accountId) {
+    public MaterialResult listLinks(String courseId, String accountId, String category) {
         MaterialResult result = new MaterialResult();
         try {
             assertCourseReadable(accountId, courseId);
-            List<MaterialLink> links = materialMapper.findLinksByCourseId(courseId);
+            String normalizedCategory = MaterialCategory.normalize(category);
+            List<MaterialLink> links = materialMapper.findLinksByCourseId(courseId, normalizedCategory);
             result.setLinks(links);
             result.setSuccess(true);
             result.setMessage("外链资料获取成功");
@@ -294,6 +305,7 @@ public class MaterialService {
         MaterialResult result = new MaterialResult();
         try {
             assertCourseTeacher(request.getAccountId(), courseId);
+            String normalizedCategory = MaterialCategory.normalize(request.getCategory());
             if (request.getTitle() == null || request.getTitle().trim().isEmpty()) {
                 throw new IllegalArgumentException("标题不能为空");
             }
@@ -308,10 +320,12 @@ public class MaterialService {
                 if (folder == null) {
                     throw new IllegalArgumentException("文件夹不存在");
                 }
+                assertFolderCategory(folder, normalizedCategory);
             }
 
             MaterialLink link = new MaterialLink();
             link.setCourseId(courseId);
+            link.setCategory(normalizedCategory);
             link.setFolderId(request.getFolderId());
             link.setTitle(request.getTitle().trim());
             link.setUrl(request.getUrl().trim());
@@ -349,14 +363,20 @@ public class MaterialService {
     }
 
     private void deleteFolderContent(String courseId, Long folderId) {
+        MaterialFolder folder = materialMapper.findFolderById(courseId, folderId);
+        if (folder == null) {
+            return;
+        }
         List<MaterialAttachment> attachments = materialMapper.findAttachmentsByFolder(courseId, folderId);
         for (MaterialAttachment attachment : attachments) {
+            assertAttachmentCategory(attachment, folder.getCategory());
             deletePhysicalFile(attachment.getRelativePath());
             materialMapper.deleteAttachment(courseId, attachment.getAttachmentId());
         }
 
         List<MaterialLink> links = materialMapper.findLinksByFolder(courseId, folderId);
         for (MaterialLink link : links) {
+            assertLinkCategory(link, folder.getCategory());
             materialMapper.deleteLink(courseId, link.getLinkId());
         }
     }
@@ -460,6 +480,24 @@ public class MaterialService {
     private boolean isValidUrl(String url) {
         String lower = url.toLowerCase();
         return lower.startsWith("http://") || lower.startsWith("https://");
+    }
+
+    private void assertFolderCategory(MaterialFolder folder, String category) {
+        if (!category.equals(folder.getCategory())) {
+            throw new IllegalArgumentException("文件夹不属于当前资料分区");
+        }
+    }
+
+    private void assertAttachmentCategory(MaterialAttachment attachment, String category) {
+        if (!category.equals(attachment.getCategory())) {
+            throw new IllegalArgumentException("附件不属于当前资料分区");
+        }
+    }
+
+    private void assertLinkCategory(MaterialLink link, String category) {
+        if (!category.equals(link.getCategory())) {
+            throw new IllegalArgumentException("外链不属于当前资料分区");
+        }
     }
 
     private Set<Long> collectDescendantFolderIds(List<MaterialFolder> folders, Long rootId) {

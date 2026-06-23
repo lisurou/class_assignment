@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 public class MaterialLink {
     private Long linkId;
     private String courseId;
+    private String category;
     private Long folderId;
     private String title;
     private String url;

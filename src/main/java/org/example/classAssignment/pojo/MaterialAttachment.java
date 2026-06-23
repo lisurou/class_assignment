@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 public class MaterialAttachment {
     private Long attachmentId;
     private String courseId;
+    private String category;
     private Long folderId;
     private String originalName;
     private String storedName;

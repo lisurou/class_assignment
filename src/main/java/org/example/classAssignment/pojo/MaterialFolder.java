@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 public class MaterialFolder {
     private Long folderId;
     private String courseId;
+    private String category;
     private Long parentId;
     private String name;
     private String createdBy;
