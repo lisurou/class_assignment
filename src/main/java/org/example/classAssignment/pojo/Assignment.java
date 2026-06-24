@@ -16,4 +16,9 @@ public class Assignment {
     String correct;
     Integer score;
     String submitContent;
+    String fileName;
+    String fileStoredName;
+    Long fileSize;
+    String fileContentType;
+    String fileDownloadUrl;
 }

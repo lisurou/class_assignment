@@ -4,8 +4,16 @@ import org.example.classAssignment.pojo.*;
 import org.example.classAssignment.service.AccountService;
 import org.example.classAssignment.mapper.AccountMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -96,7 +104,7 @@ public class AccountController {
                 result.setSuccess(true);
                 result.setMessage("顶置成功");
                 List<Course> top;
-                top = updateTopCourses(topCourses);
+                top = updateTopCourses(newTopCourses);
                 result.setTop(top);
             }
         } catch (Exception e) {
@@ -119,7 +127,8 @@ public class AccountController {
             account.setTop(newTopCourses);
             accountService.updateTop(accountId, newTopCourses);
 
-            List<Course> top = updateTopCourses(topCourses);
+            // 2. 返回更新后的置顶课程列表
+            List<Course> top = updateTopCourses(newTopCourses);
             result.setTop(top);
             result.setSuccess(true);
             result.setMessage("取消置顶成功");
@@ -348,6 +357,8 @@ public class AccountController {
                 result.setMessage("不存在此课程");
             } else {
                 accountService.updateLearned(accountId, newStringLearned);
+                accountService.syncCourseAssignmentsForStudent(accountId, id);
+                //查询课程详细信息，并返回给前端进行渲染
                 List<Course> learned = updateLearnedCourses(newStringLearned);
                 result.setLearned(learned);
                 result.setSuccess(true);
@@ -368,12 +379,16 @@ public class AccountController {
     }
 
     @PostMapping("/assignment-submit")
-    public Result assignmentSubmit(@RequestBody CourseAndAccount request) {
-        String accountId=request.getAccountId();
-        String id=request.getId();
-        String assignmentId=request.getAssignmentId();
-        String submitContent=request.getSubmitContent();
-        return accountService.updateAssignment(accountId,id,assignmentId,submitContent);
+//    @ApiOperation("提交作业")
+//    public Result assignmentSubmit(@ApiParam("提交作业信息") @RequestBody CourseAndAccount request) {
+    public Result assignmentSubmit(
+            @RequestParam("accountId") String accountId,
+            @RequestParam("id") String id,
+            @RequestParam("assignmentId") String assignmentId,
+            @RequestParam(value = "submitContent", required = false) String submitContent,
+            @RequestPart(value = "file", required = false) MultipartFile file
+    ) {
+        return accountService.updateAssignment(accountId, id, assignmentId, submitContent, file);
     }
 
     @PostMapping("/check-assignment-submit")
@@ -399,6 +414,34 @@ public class AccountController {
         String accountIdNull=request.getAccountId();
         Assignment assignment=request.getAssignment();
         return accountService.insertAssignments(accountIdNull,id,assignment);
+    }
+
+    @PostMapping("/update-course-assignment")
+    public Result updateCourseAssignment(@RequestBody CourseAndAccount request) {
+        return accountService.updateCourseAssignment(request.getId(), request.getAssignmentId(), request.getAssignment());
+    }
+
+    @PostMapping("/delete-course-assignment")
+    public Result deleteCourseAssignment(@RequestBody CourseAndAccount request) {
+        return accountService.deleteCourseAssignment(request.getId(), request.getAssignmentId());
+    }
+
+    @GetMapping("/assignment-file")
+    public ResponseEntity<Resource> downloadAssignmentFile(
+            @RequestParam("accountId") String accountId,
+            @RequestParam("id") String id,
+            @RequestParam("assignmentId") String assignmentId
+    ) throws IOException {
+        Assignment fileMeta = accountService.getAssignmentFileMeta(accountId, id, assignmentId);
+        Resource resource = accountService.loadAssignmentFile(accountId, id, assignmentId);
+        if (resource == null || fileMeta == null || fileMeta.getFileName() == null) {
+            return ResponseEntity.notFound().build();
+        }
+        String encodedFileName = URLEncoder.encode(fileMeta.getFileName(), StandardCharsets.UTF_8).replaceAll("\\+", "%20");
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encodedFileName)
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .body(resource);
     }
 
     // 处理字符串拼接，避免空字符串和多余逗号
