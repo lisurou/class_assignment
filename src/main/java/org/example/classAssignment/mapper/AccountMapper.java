@@ -1,7 +1,9 @@
 package org.example.classAssignment.mapper;
 
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 import org.example.classAssignment.pojo.Account;
@@ -65,12 +67,20 @@ public interface AccountMapper {
     List<Assignment> findAssignment(String accountId, String id);
     @Update("update asssignment set submit_content=#{submitContent} where account_id=#{accountId} and id=#{id} and assignment_id=#{assignmentId}")
     Boolean updateAssignment(String accountId, String id, String assignmentId,String submitContent);
+    @Update("update asssignment set file_name=#{fileName}, file_stored_name=#{fileStoredName}, file_size=#{fileSize}, file_content_type=#{fileContentType} " +
+            "where account_id=#{accountId} and id=#{id} and assignment_id=#{assignmentId}")
+    Boolean updateAssignmentFileMeta(String accountId, String id, String assignmentId, String fileName, String fileStoredName, Long fileSize, String fileContentType);
     @Select("select * from asssignment where account_id=#{accountId} and id=#{id} and assignment_id=#{assignmentId}")
     Assignment findAssignmentById(String assignmentId);
     @Update("update asssignment set submit=#{submit} where account_id=#{accountId} and id=#{id} and assignment_id=#{assignmentId}")
     Boolean updateSubmit(String accountId,String id,String assignmentId, String submit);
+    @Select("select * from asssignment where id=#{id} and assignment_id=#{assignmentId} order by account_id")
+    List<Assignment> findAssignmentSubmissions(String id, String assignmentId);
     @Select("select * from asssignment where id=#{id} and assignment_id=#{assignmentId} and submit=#{submit}")
     List<Assignment> findSubmitAssignment(String id, String assignmentId, String submit);
+    @Select("select file_name as fileName, file_stored_name as fileStoredName, file_size as fileSize, file_content_type as fileContentType " +
+            "from asssignment where account_id=#{accountId} and id=#{id} and assignment_id=#{assignmentId}")
+    Assignment findAssignmentFileMeta(String accountId, String id, String assignmentId);
     @Update("update asssignment set score=#{score},correct='已批改' where account_id=#{accountId} and id=#{id} and assignment_id=#{assignmentId}")
     Boolean updateScore(Integer score,String accountId,String id,String assignmentId);
     @Select("Select students from course where id=#{id}")
@@ -78,8 +88,18 @@ public interface AccountMapper {
     @Insert("insert into asssignment(account_id,id,assignment_id,title, deadline, assignment_type, content, total_score) " +
             "values(#{accountId},#{id},#{assignmentId},#{title}, #{deadline}, #{assignmentType}, #{content}, #{totalScore})")
     Boolean insertAssignment(String accountId, String id, String assignmentId, String title, String deadline, String assignmentType, String content, Integer totalScore);
+    @Update("update asssignment set title=#{title}, deadline=#{deadline}, assignment_type=#{assignmentType}, content=#{content}, total_score=#{totalScore} " +
+            "where id=#{id} and assignment_id=#{assignmentId}")
+    Boolean updateCourseAssignment(String id, String assignmentId, String title, String deadline, String assignmentType, String content, Integer totalScore);
+    @Delete("delete from asssignment where id=#{id} and assignment_id=#{assignmentId}")
+    Boolean deleteCourseAssignment(String id, String assignmentId);
     @Select("select * from asssignment where assignment_id=#{assignmentId}")
     Boolean findByAssignmentId(String assignmentId);
+    @Select("select assignment_id as assignmentId,id,title,deadline,assignment_type as assignmentType,content,total_score as totalScore " +
+            "from asssignment where id=#{id} group by assignment_id,id,title,deadline,assignment_type,content,total_score")
+    List<Assignment> findCourseAssignments(String id);
+    @Select("select count(1) from asssignment where account_id=#{accountId} and id=#{id} and assignment_id=#{assignmentId}")
+    Integer countAssignmentByStudent(@Param("accountId") String accountId, @Param("id") String id, @Param("assignmentId") String assignmentId);
     @Update("update course set students=#{students}where id=#{id}")
     Boolean updateStudents( String students,String id);
 }
