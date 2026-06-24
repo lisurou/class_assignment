@@ -1,9 +1,9 @@
 spring:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://127.0.0.1:3307/class_assignment
+    url: jdbc:mysql://127.0.0.1:3306/class_assignment
     username: root
-    password: 123456
+    password: zgj0304123Z
 mybatis:
   #  ????????
   type-aliases-package: org.example.classAssignment.pojo
@@ -28,3 +28,7 @@ knife4j:
   enable: true
   setting:
     language: zh_cn
+deepseek:
+  api-key: sk-c5e1b95c8567409a858d9aff5cb87d9e
+  api-url: https://api.deepseek.com/chat/completions
+  model: deepseek-chat

@@ -15,4 +15,8 @@ public class Result {
     private List<Assignment> assignments;
     private Course course;
     private Assignment assignment;
+    private Topic topic;
+    private List<Topic> topics;
+    private Reply reply;
+    private List<Reply> replies;
 }
