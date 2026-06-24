@@ -82,4 +82,20 @@ public interface AccountMapper {
     Boolean findByAssignmentId(String assignmentId);
     @Update("update course set students=#{students}where id=#{id}")
     Boolean updateStudents( String students,String id);
+    
+    // 归档相关方法
+    @Select("select archived_learned from account where account_id=#{accountId}")
+    String findArchivedLearned(String accountId);
+
+    @Select("select archived_taught from account where account_id=#{accountId}")
+    String findArchivedTaught(String accountId);
+
+    @Update("update account set archived_learned=#{archivedLearned} where account_id=#{accountId}")
+    Boolean updateArchivedLearned(String accountId, String archivedLearned);
+
+    @Update("update account set archived_taught=#{archivedTaught} where account_id=#{accountId}")
+    Boolean updateArchivedTaught(String accountId, String archivedTaught);
+
+    @Update("update course set archived_by=#{archivedBy},archived_at=#{archivedAt} where id=#{id}")
+    Boolean updateCourseArchiveStatus(String id, String archivedBy, String archivedAt);
 }

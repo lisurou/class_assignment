@@ -2,6 +2,7 @@ package org.example.classAssignment.controller;
 
 import org.example.classAssignment.pojo.*;
 import org.example.classAssignment.service.AccountService;
+import org.example.classAssignment.mapper.AccountMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,6 +15,9 @@ import java.util.stream.Collectors;
 public class AccountController {
     @Autowired
     private AccountService accountService;
+    
+    @Autowired
+    private AccountMapper accountMapper;
 
     // 生成11位随机字符串（包含a-z和0-9），账号
     private String generateRandomAccount() {
@@ -46,7 +50,7 @@ public class AccountController {
         List<Course> courses = new ArrayList<>();
         String[] ids = courseIds.split(",");
         for (String id : ids) {
-            if (!id.trim().isEmpty()) { // 跳过空字符串元素
+            if (!id.trim().isEmpty()) {
                 Course course = accountService.findByCourseId(id);
                 if (course != null) {
                     courses.add(course);
@@ -81,15 +85,13 @@ public class AccountController {
     }
 
     @PostMapping("/top")
-//    @ApiOperation("置顶课程")
-//    public Result updateTop(@ApiParam("请求参数") @RequestBody Map<String, Object> map) {
-    public Result updateTop( @RequestBody Map<String, Object> map) {
+    public Result updateTop(@RequestBody Map<String, Object> map) {
         Result result = new Result();
         try {
             String accountId = map.get("accountId").toString();
             String id = map.get("id").toString();
             String topCourses = accountService.findTop(accountId);
-            String newTopCourses = appendId(topCourses, id); // 使用工具方法
+            String newTopCourses = appendId(topCourses, id);
             if (accountService.updateTop(accountId, newTopCourses)) {
                 result.setSuccess(true);
                 result.setMessage("顶置成功");
@@ -105,8 +107,6 @@ public class AccountController {
     }
 
     @PostMapping("/cancel-top")
-//    @ApiOperation("取消置顶课程")
-//    public Result cancelTop(@ApiParam("请求参数") @RequestBody Map<String, Object> dataMap) {
     public Result cancelTop(@RequestBody Map<String, Object> dataMap) {
         Result result = new Result();
         try {
@@ -115,12 +115,10 @@ public class AccountController {
 
             Account account = accountService.findByAccountId(accountId);
             String topCourses = account.getTop();
-            // 处理字符串，移除目标id（注意处理空值和边界情况）
             String newTopCourses = removeCourseId(topCourses, courseId);
             account.setTop(newTopCourses);
-            accountService.updateTop(accountId, newTopCourses); // 更新数据库
+            accountService.updateTop(accountId, newTopCourses);
 
-            // 2. 返回更新后的置顶课程列表
             List<Course> top = updateTopCourses(topCourses);
             result.setTop(top);
             result.setSuccess(true);
@@ -133,9 +131,7 @@ public class AccountController {
     }
 
     @PostMapping("/login")
-//    @ApiOperation("用户登录")
-//    public Result login(@ApiParam("登录信息") @RequestBody Account account) {
-    public Result login( @RequestBody Account account) {
+    public Result login(@RequestBody Account account) {
         Result result = new Result();
         try {
             String phone = account.getPhone();
@@ -168,11 +164,8 @@ public class AccountController {
         return result;
     }
 
-    //注册接口
     @PostMapping("/register")
-//    @ApiOperation("用户注册")
-//    public Result register(@ApiParam("注册信息") @RequestBody Account account) {
-    public Result register( @RequestBody Account account) {
+    public Result register(@RequestBody Account account) {
         Result result = new Result();
         try {
             if (account.getPhone() == null || account.getPassword() == null || account.getName() == null || account.getSchool() == null) {
@@ -180,17 +173,14 @@ public class AccountController {
                 result.setMessage("手机号，密码，姓名，学校不能为空");
                 return result;
             }
-            //检查账号是否已经存在
             if (accountService.findByPhone(account.getPhone()) != null) {
                 result.setSuccess(false);
                 result.setMessage("手机号已存在");
                 return result;
             }
-            //设置默认角色老师
             if (account.getIdentity() == null) {
                 account.setIdentity("老师");
             }
-            // 根据身份选择性填充数据
             if ("学生".equals(account.getIdentity())) {
                 if (account.getStudentId() == null) {
                     result.setSuccess(false);
@@ -198,16 +188,13 @@ public class AccountController {
                     return result;
                 }
             }
-            // 自动生成account（若为空）
             if (account.getAccountId() == null) {
                 String randomAccount = generateRandomAccount();
-                // 确保生成的account唯一（防止极端情况下重复）
                 while (accountService.findByAccountId(randomAccount) != null) {
                     randomAccount = generateRandomAccount();
                 }
                 account.setAccountId(randomAccount);
             }
-            //保存用户
             accountService.saveAccount(account);
             result.setSuccess(true);
             result.setMessage("注册成功");
@@ -219,8 +206,6 @@ public class AccountController {
     }
 
     @PostMapping("/change-identity")
-//    @ApiOperation("修改用户身份")
-//    public Result changeIdentity(@ApiParam("用户信息") @RequestBody Account account) {
     public Result changeIdentity(@RequestBody Account account) {
         Result result = new Result();
         try {
@@ -241,9 +226,7 @@ public class AccountController {
     }
 
     @PostMapping("/change-phone")
-//    @ApiOperation("修改手机号")
-//    public Result changePhone(@ApiParam("用户信息") @RequestBody Account account) {
-    public Result changePhone( @RequestBody Account account) {
+    public Result changePhone(@RequestBody Account account) {
         Result result = new Result();
         if (accountService.updatePhone(account)) {
             result.setSuccess(true);
@@ -256,8 +239,6 @@ public class AccountController {
     }
 
     @PostMapping("/change-password")
-//    @ApiOperation("修改密码")
-//    public Result changePassword(@ApiParam("用户信息") @RequestBody Account account) {
     public Result changePassword(@RequestBody Account account) {
         Result result = new Result();
         try {
@@ -276,9 +257,7 @@ public class AccountController {
     }
 
     @PostMapping("/change-basic-information")
-//    @ApiOperation("修改基本信息")
-//    public Result changeBasicInformation(@ApiParam("用户信息") @RequestBody Account account) {
-    public Result changeBasicInformation( @RequestBody Account account) {
+    public Result changeBasicInformation(@RequestBody Account account) {
         Result result = new Result();
         try {
             if (accountService.updateBasicInformation(account)) {
@@ -296,25 +275,21 @@ public class AccountController {
     }
 
     @PostMapping("/create-course")
-//    @ApiOperation("创建课程")
-//    public Result createCourse(@ApiParam("课程信息") @RequestBody CourseRequest request) {
-    public Result createCourse( @RequestBody CourseRequest request) {
+    public Result createCourse(@RequestBody CourseRequest request) {
         Result result = new Result();
         try {
             String accountId = request.getAccountId();
             Course course = request.getCourse();
-            //生成一个不重复的课程码，将课程插入到课程表中，更新我教的
             String randomCourseCode = generateRandomCourseCode();
-            //确保生成的课程码唯一
             while (accountService.findByCourseId(randomCourseCode) != null) {
                 randomCourseCode = generateRandomCourseCode();
             }
             course.setId(randomCourseCode);
             String stringTaught = accountService.findTaught(accountId);
-            String newStringTaught = appendId(stringTaught, randomCourseCode); // 使用工具方法
-            List<Course> taught = updateTaughtCourses(newStringTaught);
+            String newStringTaught = appendId(stringTaught, randomCourseCode);
             if (accountService.insertCourse(course)) {
                 accountService.updateTaught(accountId, newStringTaught);
+                List<Course> taught = updateTaughtCourses(newStringTaught);
                 result.setTaught(taught);
                 result.setSuccess(true);
                 result.setMessage("成功创建课程");
@@ -330,24 +305,18 @@ public class AccountController {
     }
 
     @PostMapping("/join-course")
-//    @ApiOperation("加入课程")
-//    public Result joinCourse(@ApiParam("加入课程信息") @RequestBody Map<String, Object> dataMap) {
-    public Result joinCourse( @RequestBody Map<String, Object> dataMap) {
+    public Result joinCourse(@RequestBody Map<String, Object> dataMap) {
         Result result = new Result();
         try {
             String accountId = dataMap.get("accountId").toString();
             String id = dataMap.get("id").toString();
 
-            //查询当前账户的我学的，处理null情况
             String stringLearned = accountService.findLearned(accountId);
-            // 查询当前账户的我教的，处理null情况
             String stringTaught = accountService.findTaught(accountId);
 
-            // 处理null值，转为空字符串
             stringLearned = stringLearned == null ? "" : stringLearned;
             stringTaught = stringTaught == null ? "" : stringTaught;
 
-            // 检查课程是否已经在我学的课程列表中
             if (stringLearned.contains(id)) {
                 result.setSuccess(false);
                 result.setMessage("该课程已经在您学习的课程列表中，加入失败");
@@ -358,11 +327,8 @@ public class AccountController {
                 result.setMessage("该课程已经在您教的课程列表中，加入失败");
                 return result;
             }
-            //把id插入到我学的里面
             String newStringLearned = appendId(stringLearned, id);
-            //在课程的学生添加新的账号
             String students=accountService.findStudents(id);
-           //处理null值
             String existingStudents = (students == null) ? "" : students;
             List<String> studentList = new ArrayList<>();
             if (!existingStudents.isEmpty()) {
@@ -372,17 +338,16 @@ public class AccountController {
                 studentList.add(accountId);
             }
             String updatedStudents = String.join(",", studentList);
-           if(!accountService.updateStudents(updatedStudents,id)){
-               result.setSuccess(false);
-               result.setMessage("加入课程失败" );
-               return result;
-           }
+            if(!accountService.updateStudents(updatedStudents,id)){
+                result.setSuccess(false);
+                result.setMessage("加入课程失败" );
+                return result;
+            }
             if (accountService.findByCourseId(id) == null) {
                 result.setSuccess(false);
                 result.setMessage("不存在此课程");
             } else {
                 accountService.updateLearned(accountId, newStringLearned);
-                //查询课程详细信息，并返回给前端进行渲染
                 List<Course> learned = updateLearnedCourses(newStringLearned);
                 result.setLearned(learned);
                 result.setSuccess(true);
@@ -396,59 +361,258 @@ public class AccountController {
     }
 
     @PostMapping("/assignment-details")
-//    @ApiOperation("获取作业详情")
-//    public Result assignmentDetails(@ApiParam("请求参数") @RequestBody CourseAndAccount request) {
     public Result assignmentDetails(@RequestBody CourseAndAccount request) {
-     String accountId = request.getAccountId();
-     String id = request.getId();
-     return accountService.findAssignment(accountId,id);
+        String accountId = request.getAccountId();
+        String id = request.getId();
+        return accountService.findAssignment(accountId,id);
     }
+
     @PostMapping("/assignment-submit")
-//    @ApiOperation("提交作业")
-//    public Result assignmentSubmit(@ApiParam("提交作业信息") @RequestBody CourseAndAccount request) {
-    public Result assignmentSubmit( @RequestBody CourseAndAccount request) {
+    public Result assignmentSubmit(@RequestBody CourseAndAccount request) {
         String accountId=request.getAccountId();
         String id=request.getId();
         String assignmentId=request.getAssignmentId();
         String submitContent=request.getSubmitContent();
         return accountService.updateAssignment(accountId,id,assignmentId,submitContent);
     }
+
     @PostMapping("/check-assignment-submit")
-//    @ApiOperation("查看已提交作业")
-//    public Result checkAssignmentSubmit(@ApiParam("请求参数") @RequestBody CourseAndAccount request) {
-    public Result checkAssignmentSubmit( @RequestBody CourseAndAccount request) {
+    public Result checkAssignmentSubmit(@RequestBody CourseAndAccount request) {
         String id=request.getId();
         String assignmentId=request.getAssignmentId();
         String accountId=request.getAccountId();
         return accountService.findSubmitAssignment(accountId,id,assignmentId);
     }
+
     @PostMapping("/correct-assignment")
-//    @ApiOperation("批改作业")
-//    public Result correctAssignment(@ApiParam("批改信息") @RequestBody CourseAndAccount request) {
-    public Result correctAssignment( @RequestBody CourseAndAccount request) {
-     String accountId=request.getAccountId();
-     String id=request.getId();
-     String assignmentId=request.getAssignmentId();
-     Integer score=request.getScore();
-     return accountService.updateScore(score,accountId,id,assignmentId);
+    public Result correctAssignment(@RequestBody CourseAndAccount request) {
+        String accountId=request.getAccountId();
+        String id=request.getId();
+        String assignmentId=request.getAssignmentId();
+        Integer score=request.getScore();
+        return accountService.updateScore(score,accountId,id,assignmentId);
     }
+
     @PostMapping("/release-assignment")
-//    @ApiOperation("发布作业")
-//    public Result releaseAssignment(@ApiParam("作业信息") @RequestBody CourseAndAccount request) {
     public Result releaseAssignment(@RequestBody CourseAndAccount request) {
         String id=request.getId();
         String accountIdNull=request.getAccountId();
         Assignment assignment=request.getAssignment();
         return accountService.insertAssignments(accountIdNull,id,assignment);
     }
+
     // 处理字符串拼接，避免空字符串和多余逗号
     private String appendId(String original, String newId) {
         if (original == null || original.trim().isEmpty()) {
             return newId;
         }
-        if (original.contains(newId)) { // 避免重复添加
+        if (original.contains(newId)) {
             return original;
         }
         return original + "," + newId;
+    }
+
+    // 学生归档课程（简单版本，直接归档）
+    @PostMapping("/archive-course")
+    public Result archiveCourse(@RequestBody Map<String, Object> dataMap) {
+        Result result = new Result();
+        try {
+            String accountId = dataMap.get("accountId").toString();
+            String courseId = dataMap.get("courseId").toString();
+            String archiveType = dataMap.get("archiveType").toString();
+            
+            String archivedAt = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
+            
+            accountMapper.updateCourseArchiveStatus(courseId, accountId, archivedAt);
+            
+            if ("student".equals(archiveType)) {
+                String archivedLearned = accountMapper.findArchivedLearned(accountId);
+                archivedLearned = archivedLearned == null ? "" : archivedLearned;
+                String newArchivedLearned = appendId(archivedLearned, courseId);
+                accountMapper.updateArchivedLearned(accountId, newArchivedLearned);
+                
+                String learned = accountMapper.findLearned(accountId);
+                learned = learned == null ? "" : learned;
+                String newLearned = removeCourseId(learned, courseId);
+                accountMapper.updateLearned(accountId, newLearned);
+                
+                String top = accountMapper.findTop(accountId);
+                top = top == null ? "" : top;
+                String newTop = removeCourseId(top, courseId);
+                accountMapper.updateTop(accountId, newTop);
+            } else if ("teacher_self".equals(archiveType)) {
+                String archivedTaught = accountMapper.findArchivedTaught(accountId);
+                archivedTaught = archivedTaught == null ? "" : archivedTaught;
+                String newArchivedTaught = appendId(archivedTaught, courseId);
+                accountMapper.updateArchivedTaught(accountId, newArchivedTaught);
+                
+                String taught = accountMapper.findTaught(accountId);
+                taught = taught == null ? "" : taught;
+                String newTaught = removeCourseId(taught, courseId);
+                accountMapper.updateTaught(accountId, newTaught);
+            } else if ("teacher_student".equals(archiveType)) {
+                String students = accountMapper.findStudents(courseId);
+                if (students != null && !students.isEmpty()) {
+                    String[] studentIds = students.split(",");
+                    for (String studentId : studentIds) {
+                        if (!studentId.trim().isEmpty()) {
+                            String studentArchivedLearned = accountMapper.findArchivedLearned(studentId);
+                            studentArchivedLearned = studentArchivedLearned == null ? "" : studentArchivedLearned;
+                            String newStudentArchivedLearned = appendId(studentArchivedLearned, courseId);
+                            accountMapper.updateArchivedLearned(studentId, newStudentArchivedLearned);
+                            
+                            String studentLearned = accountMapper.findLearned(studentId);
+                            studentLearned = studentLearned == null ? "" : studentLearned;
+                            String newStudentLearned = removeCourseId(studentLearned, courseId);
+                            accountMapper.updateLearned(studentId, newStudentLearned);
+                            
+                            String studentTop = accountMapper.findTop(studentId);
+                            studentTop = studentTop == null ? "" : studentTop;
+                            String newStudentTop = removeCourseId(studentTop, courseId);
+                            accountMapper.updateTop(studentId, newStudentTop);
+                        }
+                    }
+                }
+            }
+            
+            result.setSuccess(true);
+            result.setMessage("归档成功");
+        } catch (Exception e) {
+            result.setSuccess(false);
+            result.setMessage("归档失败：" + e.getMessage());
+        }
+        return result;
+    }
+
+    // 批量归档教师的所有课程
+    @PostMapping("/archive-all-courses")
+    public Result archiveAllCourses(@RequestBody Map<String, Object> dataMap) {
+        Result result = new Result();
+        try {
+            String accountId = dataMap.get("accountId").toString();
+            String archiveType = dataMap.get("archiveType").toString();
+            
+            String archivedAt = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
+            
+            if ("teacher".equals(archiveType)) {
+                String taught = accountMapper.findTaught(accountId);
+                if (taught != null && !taught.isEmpty()) {
+                    String[] courseIds = taught.split(",");
+                    for (String courseId : courseIds) {
+                        if (!courseId.trim().isEmpty()) {
+                            accountMapper.updateCourseArchiveStatus(courseId, accountId, archivedAt);
+                            
+                            String archivedTaught = accountMapper.findArchivedTaught(accountId);
+                            archivedTaught = archivedTaught == null ? "" : archivedTaught;
+                            String newArchivedTaught = appendId(archivedTaught, courseId);
+                            accountMapper.updateArchivedTaught(accountId, newArchivedTaught);
+                        }
+                    }
+                    accountMapper.updateTaught(accountId, "");
+                }
+            } else if ("student".equals(archiveType)) {
+                String learned = accountMapper.findLearned(accountId);
+                if (learned != null && !learned.isEmpty()) {
+                    String[] courseIds = learned.split(",");
+                    for (String courseId : courseIds) {
+                        if (!courseId.trim().isEmpty()) {
+                            accountMapper.updateCourseArchiveStatus(courseId, accountId, archivedAt);
+                            
+                            String archivedLearned = accountMapper.findArchivedLearned(accountId);
+                            archivedLearned = archivedLearned == null ? "" : archivedLearned;
+                            String newArchivedLearned = appendId(archivedLearned, courseId);
+                            accountMapper.updateArchivedLearned(accountId, newArchivedLearned);
+                        }
+                    }
+                    accountMapper.updateLearned(accountId, "");
+                    accountMapper.updateTop(accountId, "");
+                }
+            }
+            
+            result.setSuccess(true);
+            result.setMessage("批量归档成功");
+        } catch (Exception e) {
+            result.setSuccess(false);
+            result.setMessage("批量归档失败：" + e.getMessage());
+        }
+        return result;
+    }
+
+    // 取消归档（恢复课程）
+    @PostMapping("/unarchive-course")
+    public Result unarchiveCourse(@RequestBody Map<String, Object> dataMap) {
+        Result result = new Result();
+        try {
+            String accountId = dataMap.get("accountId").toString();
+            String courseId = dataMap.get("courseId").toString();
+            String restoreType = dataMap.get("restoreType").toString();
+            
+            accountMapper.updateCourseArchiveStatus(courseId, null, null);
+            
+            if ("learned".equals(restoreType)) {
+                String archivedLearned = accountMapper.findArchivedLearned(accountId);
+                archivedLearned = archivedLearned == null ? "" : archivedLearned;
+                String newArchivedLearned = removeCourseId(archivedLearned, courseId);
+                accountMapper.updateArchivedLearned(accountId, newArchivedLearned);
+                
+                String learned = accountMapper.findLearned(accountId);
+                learned = learned == null ? "" : learned;
+                String newLearned = appendId(learned, courseId);
+                accountMapper.updateLearned(accountId, newLearned);
+            } else if ("taught".equals(restoreType)) {
+                String archivedTaught = accountMapper.findArchivedTaught(accountId);
+                archivedTaught = archivedTaught == null ? "" : archivedTaught;
+                String newArchivedTaught = removeCourseId(archivedTaught, courseId);
+                accountMapper.updateArchivedTaught(accountId, newArchivedTaught);
+                
+                String taught = accountMapper.findTaught(accountId);
+                taught = taught == null ? "" : taught;
+                String newTaught = appendId(taught, courseId);
+                accountMapper.updateTaught(accountId, newTaught);
+            }
+            
+            result.setSuccess(true);
+            result.setMessage("取消归档成功");
+        } catch (Exception e) {
+            result.setSuccess(false);
+            result.setMessage("取消归档失败：" + e.getMessage());
+        }
+        return result;
+    }
+
+    // 获取归档的课程列表
+    @PostMapping("/get-archived-courses")
+    public Result getArchivedCourses(@RequestBody Map<String, String> dataMap) {
+        Result result = new Result();
+        try {
+            String accountId = dataMap.get("accountId").toString();
+            String courseType = dataMap.get("courseType").toString();
+            
+            List<Course> archivedCourses = new ArrayList<>();
+            
+            if ("learned".equals(courseType)) {
+                String archivedLearned = accountMapper.findArchivedLearned(accountId);
+                if (archivedLearned != null && !archivedLearned.isEmpty()) {
+                    archivedCourses = getCourses(archivedLearned);
+                }
+            } else if ("taught".equals(courseType)) {
+                String archivedTaught = accountMapper.findArchivedTaught(accountId);
+                if (archivedTaught != null && !archivedTaught.isEmpty()) {
+                    archivedCourses = getCourses(archivedTaught);
+                }
+            }
+            
+            result.setSuccess(true);
+            result.setMessage("获取成功");
+            if ("taught".equals(courseType)) {
+                result.setTaught(archivedCourses);
+            } else {
+                result.setLearned(archivedCourses);
+            }
+        } catch (Exception e) {
+            result.setSuccess(false);
+            result.setMessage("获取失败：" + e.getMessage());
+        }
+        return result;
     }
 }

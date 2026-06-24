@@ -12,4 +12,6 @@ public class Course {
     private String time;
     private Integer number;
     private String teacher;
+    private String archivedBy;      // 归档者（teacher或student的accountId）
+    private String archivedAt;      // 归档时间
 }
