@@ -15,6 +15,24 @@ import java.util.Map;
 @Service
 public class AiEvaluationService {
 
+    public static class AiEvaluationResult {
+        private final Integer score;
+        private final String comment;
+
+        public AiEvaluationResult(Integer score, String comment) {
+            this.score = score;
+            this.comment = comment;
+        }
+
+        public Integer getScore() {
+            return score;
+        }
+
+        public String getComment() {
+            return comment;
+        }
+    }
+
     @Value("${deepseek.api-key}")
     private String apiKey;
 
@@ -27,7 +45,7 @@ public class AiEvaluationService {
     private final RestTemplate restTemplate = new RestTemplate();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public int[] evaluate(String title, String content, Integer totalScore, String submitContent) {
+    public AiEvaluationResult evaluate(String title, String content, Integer totalScore, String submitContent) {
         try {
             String prompt = buildPrompt(title, content, totalScore, submitContent);
             String response = callDeepSeekApi(prompt);
@@ -69,7 +87,7 @@ public class AiEvaluationService {
         return response.getBody();
     }
 
-    private int[] parseResponse(String response, Integer totalScore) {
+    private AiEvaluationResult parseResponse(String response, Integer totalScore) {
         try {
             JsonNode root = objectMapper.readTree(response);
             String content = root.path("choices").get(0).path("message").path("content").asText();
@@ -82,7 +100,7 @@ public class AiEvaluationService {
                 int score = result.path("score").asInt();
                 score = Math.max(0, Math.min(score, totalScore));
                 String comment = result.path("comment").asText();
-                return new int[]{score, comment.hashCode() & 0x7FFFFFFF};
+                return new AiEvaluationResult(score, comment);
             }
         } catch (Exception e) {
             System.out.println("解析AI响应失败: " + e.getMessage());
@@ -92,30 +110,11 @@ public class AiEvaluationService {
 
     public String evaluateAndGetComment(String title, String content, Integer totalScore, String submitContent) {
         try {
-            String prompt = buildPrompt(title, content, totalScore, submitContent);
-            String response = callDeepSeekApi(prompt);
-            return parseCommentResponse(response);
+            AiEvaluationResult result = evaluate(title, content, totalScore, submitContent);
+            return result == null ? null : result.getComment();
         } catch (Exception e) {
             System.out.println("AI评价调用失败: " + e.getMessage());
             return null;
         }
-    }
-
-    private String parseCommentResponse(String response) {
-        try {
-            JsonNode root = objectMapper.readTree(response);
-            String content = root.path("choices").get(0).path("message").path("content").asText();
-
-            int jsonStart = content.indexOf("{");
-            int jsonEnd = content.lastIndexOf("}");
-            if (jsonStart >= 0 && jsonEnd > jsonStart) {
-                String jsonStr = content.substring(jsonStart, jsonEnd + 1);
-                JsonNode result = objectMapper.readTree(jsonStr);
-                return result.path("comment").asText();
-            }
-        } catch (Exception e) {
-            System.out.println("解析AI响应失败: " + e.getMessage());
-        }
-        return null;
     }
 }

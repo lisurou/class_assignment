@@ -70,11 +70,16 @@ public interface AccountMapper {
     @Update("update asssignment set file_name=#{fileName}, file_stored_name=#{fileStoredName}, file_size=#{fileSize}, file_content_type=#{fileContentType} " +
             "where account_id=#{accountId} and id=#{id} and assignment_id=#{assignmentId}")
     Boolean updateAssignmentFileMeta(String accountId, String id, String assignmentId, String fileName, String fileStoredName, Long fileSize, String fileContentType);
+    @Update("update asssignment set file_name=null, file_stored_name=null, file_size=null, file_content_type=null " +
+            "where account_id=#{accountId} and id=#{id} and assignment_id=#{assignmentId}")
+    Boolean clearAssignmentFileMeta(String accountId, String id, String assignmentId);
     @Select("select * from asssignment where account_id=#{accountId} and id=#{id} and assignment_id=#{assignmentId}")
     Assignment findAssignmentById(String assignmentId);
     @Update("update asssignment set submit=#{submit} where account_id=#{accountId} and id=#{id} and assignment_id=#{assignmentId}")
     Boolean updateSubmit(String accountId,String id,String assignmentId, String submit);
-    @Select("select * from asssignment where id=#{id} and assignment_id=#{assignmentId} order by account_id")
+    @Select("select a.*, ac.name as student_name, ac.student_id as student_id " +
+            "from asssignment a left join account ac on a.account_id = ac.account_id " +
+            "where a.id=#{id} and a.assignment_id=#{assignmentId} and (ac.identity='学生' or ac.identity is null) order by ac.student_id, a.account_id")
     List<Assignment> findAssignmentSubmissions(String id, String assignmentId);
     @Select("select * from asssignment where id=#{id} and assignment_id=#{assignmentId} and submit=#{submit}")
     List<Assignment> findSubmitAssignment(String id, String assignmentId, String submit);
@@ -85,21 +90,33 @@ public interface AccountMapper {
     Boolean updateScore(Integer score,String accountId,String id,String assignmentId);
     @Select("Select students from course where id=#{id}")
     String findStudents(String id);
-    @Insert("insert into asssignment(account_id,id,assignment_id,title, deadline, assignment_type, content, total_score) " +
-            "values(#{accountId},#{id},#{assignmentId},#{title}, #{deadline}, #{assignmentType}, #{content}, #{totalScore})")
-    Boolean insertAssignment(String accountId, String id, String assignmentId, String title, String deadline, String assignmentType, String content, Integer totalScore);
-    @Update("update asssignment set title=#{title}, deadline=#{deadline}, assignment_type=#{assignmentType}, content=#{content}, total_score=#{totalScore} " +
+    @Insert("insert into asssignment(account_id,id,assignment_id,title, deadline, assignment_type, content, total_score, ai_enabled) " +
+            "values(#{accountId},#{id},#{assignmentId},#{title}, #{deadline}, #{assignmentType}, #{content}, #{totalScore}, #{aiEnabled})")
+    Boolean insertAssignment(String accountId, String id, String assignmentId, String title, String deadline, String assignmentType, String content, Integer totalScore, Boolean aiEnabled);
+    @Update("update asssignment set title=#{title}, deadline=#{deadline}, assignment_type=#{assignmentType}, content=#{content}, total_score=#{totalScore}, ai_enabled=#{aiEnabled} " +
             "where id=#{id} and assignment_id=#{assignmentId}")
-    Boolean updateCourseAssignment(String id, String assignmentId, String title, String deadline, String assignmentType, String content, Integer totalScore);
+    Boolean updateCourseAssignment(String id, String assignmentId, String title, String deadline, String assignmentType, String content, Integer totalScore, Boolean aiEnabled);
     @Delete("delete from asssignment where id=#{id} and assignment_id=#{assignmentId}")
     Boolean deleteCourseAssignment(String id, String assignmentId);
     @Select("select * from asssignment where assignment_id=#{assignmentId}")
     Boolean findByAssignmentId(String assignmentId);
-    @Select("select assignment_id as assignmentId,id,title,deadline,assignment_type as assignmentType,content,total_score as totalScore " +
-            "from asssignment where id=#{id} group by assignment_id,id,title,deadline,assignment_type,content,total_score")
+    @Select("select a.assignment_id as assignmentId, a.id, max(a.title) as title, max(a.deadline) as deadline, " +
+            "max(a.assignment_type) as assignmentType, max(a.content) as content, max(a.total_score) as totalScore, " +
+            "max(a.ai_enabled) as aiEnabled, " +
+            "sum(case when ac.identity='学生' and a.correct='已批改' then 1 else 0 end) as correctedCount, " +
+            "sum(case when ac.identity='学生' and a.submit='已提交' and (a.correct is null or a.correct<>'已批改') then 1 else 0 end) as pendingCount, " +
+            "sum(case when ac.identity='学生' and (a.submit is null or a.submit<>'已提交') then 1 else 0 end) as missingCount " +
+            "from asssignment a left join account ac on a.account_id = ac.account_id where a.id=#{id} " +
+            "group by a.assignment_id, a.id")
     List<Assignment> findCourseAssignments(String id);
     @Select("select count(1) from asssignment where account_id=#{accountId} and id=#{id} and assignment_id=#{assignmentId}")
     Integer countAssignmentByStudent(@Param("accountId") String accountId, @Param("id") String id, @Param("assignmentId") String assignmentId);
+    @Update("update asssignment set ai_enabled=#{aiEnabled} where id=#{id} and assignment_id=#{assignmentId}")
+    Boolean updateAssignmentAiEnabled(String id, String assignmentId, Boolean aiEnabled);
+    @Update("update asssignment set ai_score=#{aiScore}, ai_comment=#{aiComment} where account_id=#{accountId} and id=#{id} and assignment_id=#{assignmentId}")
+    Boolean updateAssignmentAiReview(String accountId, String id, String assignmentId, Integer aiScore, String aiComment);
+    @Update("update asssignment set ai_score=null, ai_comment=null where id=#{id} and assignment_id=#{assignmentId}")
+    Boolean clearAssignmentAiReview(String id, String assignmentId);
     @Update("update course set students=#{students}where id=#{id}")
     Boolean updateStudents( String students,String id);
     

@@ -8,6 +8,7 @@ public class CourseAndAccount {
     String id;
     String assignmentId;
     String submitContent;
+    Boolean removeFile;
     Integer score;
     Assignment assignment;
 }
