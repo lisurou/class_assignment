@@ -45,11 +45,13 @@ public interface AccountServiceInterface {
 
     Result findAssignment(String accountId, String id);
     Result updateAssignment(String accountId, String id, String assignmentId, String submitContent, MultipartFile file);
+    Result deleteAssignmentSubmissionFile(String accountId, String id, String assignmentId);
     Result findSubmitAssignment(String accountId,String id,String assignmentId);
     Result updateScore(Integer score,String accountId,String id,String assignmentId);
     Result insertAssignments(String accountIdNull,String id,Assignment assignment);
     Result updateCourseAssignment(String id, String assignmentId, Assignment assignment);
     Result deleteCourseAssignment(String id, String assignmentId);
+    Result toggleAssignmentAi(String id, String assignmentId, Boolean aiEnabled);
     Boolean findByAssignmentId(String assignmentId);
     String findStudents(String id);
     Boolean updateStudents(String students,String id);

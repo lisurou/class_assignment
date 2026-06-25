@@ -7,6 +7,8 @@ public class Assignment {
     String accountId;
     String id;
     String assignmentId;
+    String studentName;
+    String studentId;
     String title;
     String deadline;
     String assignmentType;
@@ -21,4 +23,10 @@ public class Assignment {
     Long fileSize;
     String fileContentType;
     String fileDownloadUrl;
+    Boolean aiEnabled;
+    Integer aiScore;
+    String aiComment;
+    Integer correctedCount;
+    Integer pendingCount;
+    Integer missingCount;
 }

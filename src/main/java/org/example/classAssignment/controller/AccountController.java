@@ -391,6 +391,15 @@ public class AccountController {
         return accountService.updateAssignment(accountId, id, assignmentId, submitContent, file);
     }
 
+    @DeleteMapping("/assignment-submission-file")
+    public Result deleteAssignmentSubmissionFile(
+            @RequestParam("accountId") String accountId,
+            @RequestParam("id") String id,
+            @RequestParam("assignmentId") String assignmentId
+    ) {
+        return accountService.deleteAssignmentSubmissionFile(accountId, id, assignmentId);
+    }
+
     @PostMapping("/check-assignment-submit")
     public Result checkAssignmentSubmit(@RequestBody CourseAndAccount request) {
         String id=request.getId();
@@ -424,6 +433,12 @@ public class AccountController {
     @PostMapping("/delete-course-assignment")
     public Result deleteCourseAssignment(@RequestBody CourseAndAccount request) {
         return accountService.deleteCourseAssignment(request.getId(), request.getAssignmentId());
+    }
+
+    @PostMapping("/toggle-assignment-ai")
+    public Result toggleAssignmentAi(@RequestBody CourseAndAccount request) {
+        Boolean aiEnabled = request.getAssignment() == null ? null : request.getAssignment().getAiEnabled();
+        return accountService.toggleAssignmentAi(request.getId(), request.getAssignmentId(), aiEnabled);
     }
 
     @GetMapping("/assignment-file")

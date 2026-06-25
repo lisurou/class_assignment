@@ -30,6 +30,9 @@ public class AccountService implements AccountServiceInterface {
     @Autowired
     private AccountMapper accountMapper;
 
+    @Autowired
+    private AiEvaluationService aiEvaluationService;
+
     @Override
     public Account findByAccountId(String accountId) {
         return accountMapper.findByAccountId(accountId);
@@ -120,8 +123,13 @@ public class AccountService implements AccountServiceInterface {
     public Result findAssignment(String accountId, String id) {
         Result result = new Result();
         try {
-            List<Assignment> assignments = accountMapper.findAssignment(accountId, id);
             Account account = accountMapper.findByAccountId(accountId);
+            List<Assignment> assignments;
+            if (account != null && "老师".equals(account.getIdentity())) {
+                assignments = accountMapper.findCourseAssignments(id);
+            } else {
+                assignments = accountMapper.findAssignment(accountId, id);
+            }
             if (account != null && "学生".equals(account.getIdentity()) && assignments != null) {
                 List<Assignment> visibleAssignments = new ArrayList<>();
                 for (Assignment assignment : assignments) {
@@ -155,6 +163,8 @@ public class AccountService implements AccountServiceInterface {
         try {
             storeAssignmentFile(accountId, id, assignmentId, file);
             if (accountMapper.updateAssignment(accountId, id, assignmentId, assignmentContent) && accountMapper.updateSubmit(accountId, id, assignmentId, "已提交")) {
+                Assignment updatedAssignment = loadSingleAssignment(accountId, id, assignmentId);
+                runAiReviewIfEnabled(updatedAssignment);
                 Assignment assignment = loadSingleAssignment(accountId, id, assignmentId);
                 result.setSuccess(true);
                 result.setMessage("作业提交成功");
@@ -166,6 +176,22 @@ public class AccountService implements AccountServiceInterface {
         } catch (Exception e) {
             result.setSuccess(false);
             result.setMessage("作业提交失败：" + e.getMessage());
+        }
+        return result;
+    }
+
+    @Override
+    public Result deleteAssignmentSubmissionFile(String accountId, String id, String assignmentId) {
+        Result result = new Result();
+        try {
+            clearAssignmentSubmissionFile(accountId, id, assignmentId);
+            Assignment assignment = loadSingleAssignment(accountId, id, assignmentId);
+            result.setSuccess(true);
+            result.setMessage("附件删除成功");
+            result.setAssignment(assignment);
+        } catch (Exception e) {
+            result.setSuccess(false);
+            result.setMessage("附件删除失败：" + e.getMessage());
         }
         return result;
     }
@@ -224,13 +250,13 @@ public class AccountService implements AccountServiceInterface {
             //取出课程中的所有账号
             String accountIds = findStudents(id);
             accountMapper.insertAssignment(accountIdNull, id, randomCourseCode, assignment.getTitle(), assignment.getDeadline()
-                    , assignment.getAssignmentType(), assignment.getContent(), assignment.getTotalScore());
+                    , assignment.getAssignmentType(), assignment.getContent(), assignment.getTotalScore(), assignment.getAiEnabled());
             if (accountIds != null) {
                 String[] accountIdArr = accountIds.split(",");
                 for (int i = 0; i < accountIdArr.length; i++) {
                     String accountId = accountIdArr[i];
                     accountMapper.insertAssignment(accountId, id, randomCourseCode, assignment.getTitle(), assignment.getDeadline()
-                            , assignment.getAssignmentType(), assignment.getContent(), assignment.getTotalScore());
+                            , assignment.getAssignmentType(), assignment.getContent(), assignment.getTotalScore(), assignment.getAiEnabled());
                 }
             }
 
@@ -254,7 +280,8 @@ public class AccountService implements AccountServiceInterface {
                     assignment.getDeadline(),
                     assignment.getAssignmentType(),
                     assignment.getContent(),
-                    assignment.getTotalScore()
+                    assignment.getTotalScore(),
+                    assignment.getAiEnabled()
             );
             result.setSuccess(updated);
             result.setMessage(updated ? "作业更新成功" : "作业更新失败");
@@ -270,6 +297,7 @@ public class AccountService implements AccountServiceInterface {
         Result result = new Result();
         try {
             boolean deleted = accountMapper.deleteCourseAssignment(id, assignmentId);
+            deleteAssignmentDirectory(id, assignmentId);
             result.setSuccess(deleted);
             result.setMessage(deleted ? "作业删除成功" : "作业删除失败");
         } catch (Exception e) {
@@ -277,6 +305,31 @@ public class AccountService implements AccountServiceInterface {
             result.setMessage("作业删除失败：" + e.getMessage());
         }
         return result;
+    }
+
+    @Override
+    public Result toggleAssignmentAi(String id, String assignmentId, Boolean aiEnabled) {
+        Result result = new Result();
+        try {
+            boolean updated = accountMapper.updateAssignmentAiEnabled(id, assignmentId, aiEnabled);
+            if (!updated) {
+                result.setSuccess(false);
+                result.setMessage("AI预批阅设置失败");
+                return result;
+            }
+            if (Boolean.TRUE.equals(aiEnabled)) {
+                rerunAiReviewForAssignment(id, assignmentId);
+            } else {
+                accountMapper.clearAssignmentAiReview(id, assignmentId);
+            }
+            result.setSuccess(true);
+            result.setMessage(Boolean.TRUE.equals(aiEnabled) ? "已开启AI预批阅" : "已关闭AI预批阅");
+            return result;
+        } catch (Exception e) {
+            result.setSuccess(false);
+            result.setMessage("AI预批阅设置失败：" + e.getMessage());
+            return result;
+        }
     }
 
     //生成6位随机字符串（包含ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789）,课程码
@@ -344,7 +397,8 @@ public class AccountService implements AccountServiceInterface {
                     assignment.getDeadline(),
                     assignment.getAssignmentType(),
                     assignment.getContent(),
-                    assignment.getTotalScore()
+                    assignment.getTotalScore(),
+                    assignment.getAiEnabled()
             );
         }
     }
@@ -478,6 +532,29 @@ public class AccountService implements AccountServiceInterface {
         }
     }
 
+    private void clearAssignmentSubmissionFile(String accountId, String id, String assignmentId) throws IOException {
+        Path submissionDirectory = getSubmissionDirectory(accountId, id, assignmentId);
+        clearExistingSubmissionFiles(submissionDirectory);
+        Files.deleteIfExists(submissionDirectory.resolve(FILE_META_NAME));
+        Files.deleteIfExists(submissionDirectory);
+        accountMapper.clearAssignmentFileMeta(accountId, id, assignmentId);
+    }
+
+    private void deleteAssignmentDirectory(String id, String assignmentId) throws IOException {
+        Path assignmentDirectory = uploadRoot.resolve(id).resolve(assignmentId);
+        if (!Files.exists(assignmentDirectory)) {
+            return;
+        }
+        Files.walk(assignmentDirectory)
+                .sorted(Comparator.reverseOrder())
+                .forEach(path -> {
+                    try {
+                        Files.deleteIfExists(path);
+                    } catch (IOException ignored) {
+                    }
+                });
+    }
+
     private void clearExistingSubmissionFiles(Path submissionDirectory) throws IOException {
         if (!Files.exists(submissionDirectory)) {
             return;
@@ -542,5 +619,63 @@ public class AccountService implements AccountServiceInterface {
 
     private Path getSubmissionDirectory(String accountId, String id, String assignmentId) {
         return uploadRoot.resolve(id).resolve(assignmentId).resolve(accountId);
+    }
+
+    private void runAiReviewIfEnabled(Assignment assignment) {
+        if (assignment == null || !Boolean.TRUE.equals(assignment.getAiEnabled())) {
+            return;
+        }
+        String submitContent = assignment.getSubmitContent();
+        if ((submitContent == null || submitContent.isBlank()) && (assignment.getFileName() == null || assignment.getFileName().isBlank())) {
+            return;
+        }
+        AiEvaluationService.AiEvaluationResult aiResult = aiEvaluationService.evaluate(
+                assignment.getTitle(),
+                assignment.getContent(),
+                assignment.getTotalScore() == null ? 100 : assignment.getTotalScore(),
+                buildAiSubmissionText(assignment)
+        );
+        if (aiResult == null) {
+            return;
+        }
+        accountMapper.updateAssignmentAiReview(
+                assignment.getAccountId(),
+                assignment.getId(),
+                assignment.getAssignmentId(),
+                aiResult.getScore(),
+                aiResult.getComment()
+        );
+    }
+
+    private void rerunAiReviewForAssignment(String id, String assignmentId) {
+        List<Assignment> submissions = accountMapper.findAssignmentSubmissions(id, assignmentId);
+        if (submissions == null) {
+            return;
+        }
+        enrichAssignmentsWithFileMeta(submissions);
+        for (Assignment submission : submissions) {
+            if (submission == null || submission.getAccountId() == null) {
+                continue;
+            }
+            if (!"已提交".equals(submission.getSubmit())) {
+                continue;
+            }
+            submission.setAiEnabled(true);
+            runAiReviewIfEnabled(submission);
+        }
+    }
+
+    private String buildAiSubmissionText(Assignment assignment) {
+        StringBuilder builder = new StringBuilder();
+        if (assignment.getSubmitContent() != null && !assignment.getSubmitContent().isBlank()) {
+            builder.append("学生留言：").append(assignment.getSubmitContent());
+        }
+        if (assignment.getFileName() != null && !assignment.getFileName().isBlank()) {
+            if (builder.length() > 0) {
+                builder.append("\n");
+            }
+            builder.append("附件名称：").append(assignment.getFileName());
+        }
+        return builder.toString();
     }
 }
