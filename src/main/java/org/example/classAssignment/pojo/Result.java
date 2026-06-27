@@ -12,6 +12,8 @@ public class Result {
     private List<Course> learned;
     private List<Course> taught;
     private List<Course> top;
+    private Courseware courseware;
+    private List<Courseware> coursewares;
     private List<Assignment> assignments;
     private Course course;
     private Assignment assignment;

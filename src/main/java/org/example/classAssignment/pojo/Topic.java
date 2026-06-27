@@ -8,6 +8,7 @@ import java.util.Date;
 public class Topic {
     private String topicId;
     private String courseId;
+    private Long folderId;
     private String authorId;
     private String authorName;
     private String title;

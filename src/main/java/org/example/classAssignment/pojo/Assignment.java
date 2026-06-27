@@ -7,6 +7,9 @@ public class Assignment {
     String accountId;
     String id;
     String assignmentId;
+    Long folderId;
+    String submissionId;
+    String submittedAt;
     String studentName;
     String studentId;
     String title;
