@@ -10,5 +10,6 @@ public class CourseAndAccount {
     String submitContent;
     Boolean removeFile;
     Integer score;
+    String teacherComment;
     Assignment assignment;
 }

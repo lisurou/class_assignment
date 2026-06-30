@@ -26,4 +26,6 @@ public class Account {
     private String top;
     private String archivedLearned;     // 学生归档的课程ID（逗号分隔）
     private String archivedTaught;      // 教师归档的课程ID（逗号分隔）
+    private String avatarStoredName;
+    private String avatarUrl;
 }

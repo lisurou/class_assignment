@@ -9,6 +9,7 @@ public class Result {
     private Boolean success;
     private String message;
     private Account account;
+    private List<Account> accounts;
     private List<Course> learned;
     private List<Course> taught;
     private List<Course> top;
@@ -21,4 +22,5 @@ public class Result {
     private List<Topic> topics;
     private Reply reply;
     private List<Reply> replies;
+    private List<CourseNotification> notifications;
 }

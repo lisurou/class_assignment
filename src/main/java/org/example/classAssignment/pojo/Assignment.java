@@ -13,6 +13,7 @@ public class Assignment {
     String studentName;
     String studentId;
     String title;
+    String publishTime;
     String deadline;
     String assignmentType;
     String content;
@@ -26,9 +27,15 @@ public class Assignment {
     Long fileSize;
     String fileContentType;
     String fileDownloadUrl;
+    String attachmentName;
+    String attachmentStoredName;
+    Long attachmentSize;
+    String attachmentContentType;
+    String attachmentDownloadUrl;
     Boolean aiEnabled;
     Integer aiScore;
     String aiComment;
+    String teacherComment;
     Integer correctedCount;
     Integer pendingCount;
     Integer missingCount;

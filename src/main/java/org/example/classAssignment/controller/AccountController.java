@@ -283,6 +283,14 @@ public class AccountController {
         return result;
     }
 
+    @PostMapping(value = "/change-avatar-form", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result changeAvatar(
+            @RequestParam("accountId") String accountId,
+            @RequestPart("file") MultipartFile file
+    ) {
+        return accountService.updateAvatar(accountId, file);
+    }
+
     @PostMapping("/create-course")
     public Result createCourse(@RequestBody CourseRequest request) {
         Result result = new Result();
@@ -414,7 +422,7 @@ public class AccountController {
         String id=request.getId();
         String assignmentId=request.getAssignmentId();
         Integer score=request.getScore();
-        return accountService.updateScore(score,accountId,id,assignmentId);
+        return accountService.updateScore(score, request.getTeacherComment(), accountId,id,assignmentId);
     }
 
     @PostMapping("/release-assignment")
@@ -422,12 +430,61 @@ public class AccountController {
         String id=request.getId();
         String accountIdNull=request.getAccountId();
         Assignment assignment=request.getAssignment();
-        return accountService.insertAssignments(accountIdNull,id,assignment);
+        return accountService.insertAssignments(accountIdNull,id,assignment, null);
+    }
+
+    @PostMapping(value = "/release-assignment-form", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result releaseAssignmentForm(
+            @RequestParam("accountId") String accountId,
+            @RequestParam("id") String id,
+            @RequestParam("title") String title,
+            @RequestParam(value = "publishTime", required = false) String publishTime,
+            @RequestParam(value = "deadline", required = false) String deadline,
+            @RequestParam(value = "assignmentType", required = false) String assignmentType,
+            @RequestParam(value = "content", required = false) String content,
+            @RequestParam(value = "totalScore", required = false) Integer totalScore,
+            @RequestParam(value = "aiEnabled", required = false) Boolean aiEnabled,
+            @RequestPart(value = "file", required = false) MultipartFile file
+    ) {
+        Assignment assignment = new Assignment();
+        assignment.setTitle(title);
+        assignment.setPublishTime(publishTime);
+        assignment.setDeadline(deadline);
+        assignment.setAssignmentType(assignmentType);
+        assignment.setContent(content);
+        assignment.setTotalScore(totalScore);
+        assignment.setAiEnabled(aiEnabled);
+        return accountService.insertAssignments(accountId, id, assignment, file);
     }
 
     @PostMapping("/update-course-assignment")
     public Result updateCourseAssignment(@RequestBody CourseAndAccount request) {
-        return accountService.updateCourseAssignment(request.getId(), request.getAssignmentId(), request.getAssignment());
+        return accountService.updateCourseAssignment(request.getId(), request.getAssignmentId(), request.getAssignment(), null, Boolean.FALSE);
+    }
+
+    @PostMapping(value = "/update-course-assignment-form", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Result updateCourseAssignmentForm(
+            @RequestParam("id") String id,
+            @RequestParam("assignmentId") String assignmentId,
+            @RequestParam("title") String title,
+            @RequestParam(value = "publishTime", required = false) String publishTime,
+            @RequestParam(value = "deadline", required = false) String deadline,
+            @RequestParam(value = "assignmentType", required = false) String assignmentType,
+            @RequestParam(value = "content", required = false) String content,
+            @RequestParam(value = "totalScore", required = false) Integer totalScore,
+            @RequestParam(value = "aiEnabled", required = false) Boolean aiEnabled,
+            @RequestParam(value = "removeAttachment", required = false, defaultValue = "false") Boolean removeAttachment,
+            @RequestPart(value = "file", required = false) MultipartFile file
+    ) {
+        Assignment assignment = new Assignment();
+        assignment.setTitle(title);
+        assignment.setPublishTime(publishTime);
+        assignment.setDeadline(deadline);
+        assignment.setAssignmentType(assignmentType);
+        assignment.setContent(content);
+        assignment.setTotalScore(totalScore);
+        assignment.setAiEnabled(aiEnabled);
+        return accountService.updateCourseAssignment(id, assignmentId, assignment, file, removeAttachment);
     }
 
     @PostMapping("/delete-course-assignment")
@@ -457,6 +514,75 @@ public class AccountController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encodedFileName)
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .body(resource);
+    }
+
+    @GetMapping("/assignment-resource")
+    public ResponseEntity<Resource> downloadAssignmentResource(
+            @RequestParam("id") String id,
+            @RequestParam("assignmentId") String assignmentId
+    ) throws IOException {
+        Assignment fileMeta = accountService.getAssignmentResourceMeta(id, assignmentId);
+        Resource resource = accountService.loadAssignmentResource(id, assignmentId);
+        if (resource == null || fileMeta == null || fileMeta.getAttachmentName() == null) {
+            return ResponseEntity.notFound().build();
+        }
+        String encodedFileName = URLEncoder.encode(fileMeta.getAttachmentName(), StandardCharsets.UTF_8).replaceAll("\\+", "%20");
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encodedFileName)
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .body(resource);
+    }
+
+    @GetMapping("/account-avatar/{accountId}")
+    public ResponseEntity<Resource> getAccountAvatar(@PathVariable("accountId") String accountId) throws IOException {
+        Resource resource = accountService.loadAccountAvatar(accountId);
+        if (resource == null || !resource.exists()) {
+            return ResponseEntity.notFound().build();
+        }
+        MediaType mediaType = MediaType.APPLICATION_OCTET_STREAM;
+        try {
+            String contentType = resource.getFile() == null ? null : java.nio.file.Files.probeContentType(resource.getFile().toPath());
+            if (contentType != null && !contentType.isBlank()) {
+                mediaType = MediaType.parseMediaType(contentType);
+            }
+        } catch (Exception ignored) {
+        }
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate, max-age=0")
+                .contentType(mediaType)
+                .body(resource);
+    }
+
+    @GetMapping("/course-members")
+    public Result getCourseMembers(@RequestParam("courseId") String courseId) {
+        return accountService.getCourseMembers(courseId);
+    }
+
+    @GetMapping("/notifications")
+    public Result getNotifications(@RequestParam("accountId") String accountId) {
+        return accountService.getNotifications(accountId);
+    }
+
+    @PostMapping("/notifications/read-one")
+    public Result markNotificationAsRead(@RequestBody Map<String, Object> payload) {
+        Long notificationId = Long.valueOf(String.valueOf(payload.get("notificationId")));
+        String accountId = String.valueOf(payload.get("accountId"));
+        return accountService.markNotificationAsRead(notificationId, accountId);
+    }
+
+    @PostMapping("/notifications/read-all")
+    public Result markAllNotificationsAsRead(@RequestBody Map<String, Object> payload) {
+        String accountId = String.valueOf(payload.get("accountId"));
+        return accountService.markAllNotificationsAsRead(accountId);
+    }
+
+    @PostMapping("/remind-assignment")
+    public Result remindAssignment(@RequestBody Map<String, Object> payload) {
+        String courseId = String.valueOf(payload.get("id"));
+        String assignmentId = String.valueOf(payload.get("assignmentId"));
+        String targetAccountId = String.valueOf(payload.get("targetAccountId"));
+        String teacherAccountId = String.valueOf(payload.get("teacherAccountId"));
+        return accountService.sendAssignmentReminder(courseId, assignmentId, targetAccountId, teacherAccountId);
     }
 
     // 处理字符串拼接，避免空字符串和多余逗号
@@ -670,6 +796,93 @@ public class AccountController {
         } catch (Exception e) {
             result.setSuccess(false);
             result.setMessage("获取失败：" + e.getMessage());
+        }
+        return result;
+    }
+
+    @PostMapping("/reorder-archived-courses")
+    public Result reorderArchivedCourses(@RequestBody Map<String, Object> dataMap) {
+        Result result = new Result();
+        try {
+            String accountId = String.valueOf(dataMap.get("accountId"));
+            String courseType = String.valueOf(dataMap.get("courseType"));
+            Object orderedCourseIdsObj = dataMap.get("orderedCourseIds");
+            if (!(orderedCourseIdsObj instanceof List<?> orderedCourseIds)) {
+                result.setSuccess(false);
+                result.setMessage("课程顺序参数错误");
+                return result;
+            }
+
+            List<String> normalizedCourseIds = orderedCourseIds.stream()
+                    .filter(Objects::nonNull)
+                    .map(String::valueOf)
+                    .map(String::trim)
+                    .filter(item -> !item.isEmpty())
+                    .distinct()
+                    .toList();
+            String archivedValue = String.join(",", normalizedCourseIds);
+
+            boolean updated;
+            if ("taught".equals(courseType)) {
+                updated = accountMapper.updateArchivedTaught(accountId, archivedValue);
+                result.setTaught(getCourses(archivedValue));
+            } else if ("learned".equals(courseType)) {
+                updated = accountMapper.updateArchivedLearned(accountId, archivedValue);
+                result.setLearned(getCourses(archivedValue));
+            } else {
+                result.setSuccess(false);
+                result.setMessage("课程类型错误");
+                return result;
+            }
+
+            result.setSuccess(updated);
+            result.setMessage(updated ? "归档课程排序已更新" : "归档课程排序更新失败");
+        } catch (Exception e) {
+            result.setSuccess(false);
+            result.setMessage("归档课程排序更新失败：" + e.getMessage());
+        }
+        return result;
+    }
+
+    @PostMapping("/archived-course-action")
+    public Result archivedCourseAction(@RequestBody Map<String, Object> dataMap) {
+        Result result = new Result();
+        try {
+            String accountId = String.valueOf(dataMap.get("accountId"));
+            String courseId = String.valueOf(dataMap.get("courseId"));
+            String courseType = String.valueOf(dataMap.get("courseType"));
+            String action = String.valueOf(dataMap.get("action"));
+
+            if ("learned".equals(courseType)) {
+                String archivedLearned = accountMapper.findArchivedLearned(accountId);
+                archivedLearned = archivedLearned == null ? "" : archivedLearned;
+                String newArchivedLearned = removeCourseId(archivedLearned, courseId);
+                accountMapper.updateArchivedLearned(accountId, newArchivedLearned);
+                result.setLearned(getCourses(newArchivedLearned));
+                result.setSuccess(true);
+                result.setMessage("delete".equals(action) ? "课程删除成功" : "操作成功");
+                return result;
+            }
+
+            if ("taught".equals(courseType)) {
+                String archivedTaught = accountMapper.findArchivedTaught(accountId);
+                archivedTaught = archivedTaught == null ? "" : archivedTaught;
+                String newArchivedTaught = removeCourseId(archivedTaught, courseId);
+                accountMapper.updateArchivedTaught(accountId, newArchivedTaught);
+                if ("finish".equals(action) || "delete".equals(action)) {
+                    accountService.deleteCourseCompletely(courseId);
+                }
+                result.setTaught(getCourses(newArchivedTaught));
+                result.setSuccess(true);
+                result.setMessage("finish".equals(action) ? "课程已结课" : ("delete".equals(action) ? "课程删除成功" : "操作成功"));
+                return result;
+            }
+
+            result.setSuccess(false);
+            result.setMessage("课程类型错误");
+        } catch (Exception e) {
+            result.setSuccess(false);
+            result.setMessage("操作失败：" + e.getMessage());
         }
         return result;
     }

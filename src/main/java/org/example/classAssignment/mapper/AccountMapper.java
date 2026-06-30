@@ -9,6 +9,7 @@ import org.apache.ibatis.annotations.Update;
 import org.example.classAssignment.pojo.Account;
 import org.example.classAssignment.pojo.Assignment;
 import org.example.classAssignment.pojo.Course;
+import org.example.classAssignment.pojo.CourseNotification;
 
 import java.util.List;
 
@@ -19,6 +20,10 @@ public interface AccountMapper {
 
     @Select("select * from account where phone=#{phone}")
     Account findByPhone(String phone);
+
+    @Select("select a.* from account a join course c on c.id=#{courseId} " +
+            "where find_in_set(a.account_id, c.students) order by a.student_id, a.account_id")
+    List<Account> findCourseMembers(String courseId);
 
     @Insert("insert into account(account_id, password, phone, name, school, identity, student_id) " +
             "values(#{accountId}, #{password}, #{phone}, #{name}, #{school}, #{identity}, #{studentId})")
@@ -36,6 +41,9 @@ public interface AccountMapper {
 
     @Update("update account set password=#{password} where account_id=#{accountId}")
     Integer updatePassword(Account account);
+
+    @Update("update account set avatar_stored_name=#{avatarStoredName} where account_id=#{accountId}")
+    Integer updateAvatarStoredName(String accountId, String avatarStoredName);
 
     @Update("update account set name=#{name},student_id=#{studentId},school=#{school},major=#{major},classes=#{classes},grade=#{grade},enrollment=#{enrollment} where account_id=#{accountId}")
     Integer updateBasicInformation(Account account);
@@ -77,7 +85,7 @@ public interface AccountMapper {
     Assignment findAssignmentById(String assignmentId);
     @Update("update asssignment set submit=#{submit} where account_id=#{accountId} and id=#{id} and assignment_id=#{assignmentId}")
     Boolean updateSubmit(String accountId,String id,String assignmentId, String submit);
-    @Select("select a.*, ac.name as student_name, ac.student_id as student_id " +
+    @Select("select a.*, ac.name as student_name, ac.student_id as student_id, a.teacher_comment as teacherComment " +
             "from asssignment a left join account ac on a.account_id = ac.account_id " +
             "where a.id=#{id} and a.assignment_id=#{assignmentId} and (ac.identity='学生' or ac.identity is null) order by ac.student_id, a.account_id")
     List<Assignment> findAssignmentSubmissions(String id, String assignmentId);
@@ -86,8 +94,9 @@ public interface AccountMapper {
     @Select("select file_name as fileName, file_stored_name as fileStoredName, file_size as fileSize, file_content_type as fileContentType " +
             "from asssignment where account_id=#{accountId} and id=#{id} and assignment_id=#{assignmentId}")
     Assignment findAssignmentFileMeta(String accountId, String id, String assignmentId);
-    @Update("update asssignment set score=#{score},correct='已批改' where account_id=#{accountId} and id=#{id} and assignment_id=#{assignmentId}")
-    Boolean updateScore(Integer score,String accountId,String id,String assignmentId);
+    @Update("update asssignment set score=#{score}, teacher_comment=#{teacherComment}, correct='已批改' " +
+            "where account_id=#{accountId} and id=#{id} and assignment_id=#{assignmentId}")
+    Integer updateScore(Integer score,String teacherComment,String accountId,String id,String assignmentId);
     @Select("Select students from course where id=#{id}")
     String findStudents(String id);
     @Insert("insert into asssignment(account_id,id,assignment_id,title, deadline, assignment_type, content, total_score, ai_enabled) " +
@@ -119,6 +128,34 @@ public interface AccountMapper {
     Boolean clearAssignmentAiReview(String id, String assignmentId);
     @Update("update course set students=#{students}where id=#{id}")
     Boolean updateStudents( String students,String id);
+
+    @Insert("insert into course_notification(account_id, course_id, assignment_id, type, title, content, sender_name, read_status, created_at) " +
+            "values(#{accountId}, #{courseId}, #{assignmentId}, #{type}, #{title}, #{content}, #{senderName}, #{readStatus}, now())")
+    Integer insertNotification(String accountId, String courseId, String assignmentId, String type, String title, String content, String senderName, Boolean readStatus);
+
+    @Select("select id, account_id as accountId, course_id as courseId, assignment_id as assignmentId, type, title, content, " +
+            "sender_name as senderName, read_status as readStatus, created_at as createdAt " +
+            "from course_notification where account_id=#{accountId} order by read_status asc, created_at desc, id desc")
+    List<CourseNotification> findNotificationsByAccountId(String accountId);
+
+    @Update("update course_notification set read_status=1 where id=#{notificationId} and account_id=#{accountId}")
+    Integer markNotificationAsRead(Long notificationId, String accountId);
+
+    @Update("update course_notification set read_status=1 where account_id=#{accountId} and read_status=0")
+    Integer markAllNotificationsAsRead(String accountId);
+
+    @Insert("insert into assignment_resource(course_id, assignment_id, file_name, file_stored_name, file_size, file_content_type, created_at) " +
+            "values(#{id}, #{assignmentId}, #{fileName}, #{fileStoredName}, #{fileSize}, #{fileContentType}, now()) " +
+            "on duplicate key update file_name=values(file_name), file_stored_name=values(file_stored_name), " +
+            "file_size=values(file_size), file_content_type=values(file_content_type)")
+    Integer upsertAssignmentResource(String id, String assignmentId, String fileName, String fileStoredName, Long fileSize, String fileContentType);
+
+    @Delete("delete from assignment_resource where course_id=#{id} and assignment_id=#{assignmentId}")
+    Integer deleteAssignmentResource(String id, String assignmentId);
+
+    @Select("select file_name as attachmentName, file_stored_name as attachmentStoredName, file_size as attachmentSize, " +
+            "file_content_type as attachmentContentType from assignment_resource where course_id=#{id} and assignment_id=#{assignmentId}")
+    Assignment findAssignmentResource(String id, String assignmentId);
     
     // 归档相关方法
     @Select("select archived_learned from account where account_id=#{accountId}")
@@ -135,4 +172,16 @@ public interface AccountMapper {
 
     @Update("update course set archived_by=#{archivedBy},archived_at=#{archivedAt} where id=#{id}")
     Boolean updateCourseArchiveStatus(String id, String archivedBy, String archivedAt);
+
+    @Delete("delete from course where id=#{id}")
+    Integer deleteCourseById(String id);
+
+    @Delete("delete from asssignment where id=#{id}")
+    Integer deleteAssignmentsByCourseId(String id);
+
+    @Delete("delete from assignment_resource where course_id=#{id}")
+    Integer deleteAssignmentResourcesByCourseId(String id);
+
+    @Delete("delete from course_notification where course_id=#{id}")
+    Integer deleteNotificationsByCourseId(String id);
 }

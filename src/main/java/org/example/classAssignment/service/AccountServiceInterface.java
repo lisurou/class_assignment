@@ -25,6 +25,8 @@ public interface AccountServiceInterface {
 
     Boolean updatePassword(Account account);
 
+    Result updateAvatar(String accountId, MultipartFile file);
+
     Boolean updateBasicInformation(Account account);
 
     Course findByCourseId(String id);
@@ -47,15 +49,23 @@ public interface AccountServiceInterface {
     Result updateAssignment(String accountId, String id, String assignmentId, String submitContent, MultipartFile file);
     Result deleteAssignmentSubmissionFile(String accountId, String id, String assignmentId);
     Result findSubmitAssignment(String accountId,String id,String assignmentId);
-    Result updateScore(Integer score,String accountId,String id,String assignmentId);
-    Result insertAssignments(String accountIdNull,String id,Assignment assignment);
-    Result updateCourseAssignment(String id, String assignmentId, Assignment assignment);
+    Result updateScore(Integer score,String teacherComment,String accountId,String id,String assignmentId);
+    Result insertAssignments(String accountIdNull,String id,Assignment assignment, MultipartFile file);
+    Result updateCourseAssignment(String id, String assignmentId, Assignment assignment, MultipartFile file, Boolean removeAttachment);
     Result deleteCourseAssignment(String id, String assignmentId);
     Result toggleAssignmentAi(String id, String assignmentId, Boolean aiEnabled);
+    Result getCourseMembers(String courseId);
+    Result getNotifications(String accountId);
+    Result markNotificationAsRead(Long notificationId, String accountId);
+    Result markAllNotificationsAsRead(String accountId);
+    Result sendAssignmentReminder(String courseId, String assignmentId, String targetAccountId, String teacherAccountId);
     Boolean findByAssignmentId(String assignmentId);
     String findStudents(String id);
     Boolean updateStudents(String students,String id);
     void syncCourseAssignmentsForStudent(String accountId, String id);
     Resource loadAssignmentFile(String accountId, String id, String assignmentId) throws IOException;
     Assignment getAssignmentFileMeta(String accountId, String id, String assignmentId);
+    Resource loadAssignmentResource(String id, String assignmentId) throws IOException;
+    Assignment getAssignmentResourceMeta(String id, String assignmentId);
+    Resource loadAccountAvatar(String accountId) throws IOException;
 }
