@@ -1,5 +1,6 @@
 package org.example.classAssignment.service;
 
+import org.example.classAssignment.mapper.PrepareSpaceContentMapper;
 import org.example.classAssignment.mapper.PrepareSpaceMapper;
 import org.example.classAssignment.pojo.Account;
 import org.example.classAssignment.pojo.AddPrepareMemberRequest;
@@ -12,12 +13,18 @@ import org.example.classAssignment.pojo.PrepareSpaceResult;
 import org.example.classAssignment.pojo.TransferPrepareSpaceOwnerRequest;
 import org.example.classAssignment.pojo.UpdatePrepareMemberRequest;
 import org.example.classAssignment.pojo.UpdatePrepareSpaceRequest;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,6 +39,12 @@ public class PrepareSpaceService {
 
     @Autowired
     private AccountService accountService;
+
+    @Autowired
+    private PrepareSpaceContentMapper prepareSpaceContentMapper;
+
+    @Value("${prepare-space.storage-path:uploads/prepare-spaces}")
+    private String storagePath;
 
     public PrepareSpaceResult createPrepareSpace(CreatePrepareSpaceRequest request) {
         PrepareSpaceResult result = new PrepareSpaceResult();
@@ -130,18 +143,25 @@ public class PrepareSpaceService {
         return result;
     }
 
+    @Transactional
     public PrepareSpaceResult deletePrepareSpace(Long spaceId, String accountId) {
         PrepareSpaceResult result = new PrepareSpaceResult();
         try {
             PrepareSpace prepareSpace = assertOwnerSpace(spaceId, accountId);
+            cleanupPrepareSpaceData(spaceId);
+            prepareSpaceMapper.removeAllMembers(spaceId);
+            insertLog(spaceId, accountId, "删除", "备课区", String.valueOf(spaceId), "删除备课区：" + prepareSpace.getName());
             int updated = prepareSpaceMapper.deletePrepareSpace(spaceId);
             if (updated <= 0) {
                 throw new IllegalStateException("删除备课区失败");
             }
-            insertLog(spaceId, accountId, "删除", "备课区", String.valueOf(spaceId), "删除备课区：" + prepareSpace.getName());
+            deletePrepareSpaceFiles(spaceId);
             result.setSuccess(true);
             result.setMessage("删除备课区成功");
         } catch (Exception e) {
+            if (TransactionAspectSupport.currentTransactionStatus() != null) {
+                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            }
             result.setSuccess(false);
             result.setMessage("删除备课区失败：" + e.getMessage());
         }
@@ -445,6 +465,35 @@ public class PrepareSpaceService {
         log.setTargetId(targetId);
         log.setDetail(detail);
         prepareSpaceMapper.insertLog(log);
+    }
+
+    private void cleanupPrepareSpaceData(Long spaceId) {
+        prepareSpaceContentMapper.deleteAllAssignmentSubmissionsBySpaceId(spaceId);
+        prepareSpaceContentMapper.deleteAllAssignmentsBySpaceId(spaceId);
+        prepareSpaceContentMapper.deleteAllResourcesBySpaceId(spaceId);
+        prepareSpaceContentMapper.deleteAllTopicsBySpaceId(spaceId);
+        prepareSpaceContentMapper.deleteAllImportLogsBySpaceId(spaceId);
+        prepareSpaceContentMapper.deleteAllFoldersBySpaceId(spaceId);
+    }
+
+    private void deletePrepareSpaceFiles(Long spaceId) {
+        Path root = Paths.get(storagePath).toAbsolutePath().normalize();
+        Path spaceDir = root.resolve(String.valueOf(spaceId)).normalize();
+        if (!spaceDir.startsWith(root) || !Files.exists(spaceDir)) {
+            return;
+        }
+        try (var stream = Files.walk(spaceDir)) {
+            stream.sorted(Comparator.reverseOrder())
+                    .forEach(path -> {
+                        try {
+                            Files.deleteIfExists(path);
+                        } catch (IOException e) {
+                            throw new IllegalStateException("删除备课区文件失败：" + path, e);
+                        }
+                    });
+        } catch (IOException e) {
+            throw new IllegalStateException("删除备课区文件失败", e);
+        }
     }
 
     private String normalizeSpaceType(String type) {

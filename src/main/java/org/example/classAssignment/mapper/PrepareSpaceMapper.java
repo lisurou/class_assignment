@@ -60,6 +60,9 @@ public interface PrepareSpaceMapper {
     @Update("update prepare_space_member set status='移除' where prepare_space_id=#{spaceId} and member_id=#{memberId} and status='正常'")
     Integer removeMember(@Param("spaceId") Long spaceId, @Param("memberId") Long memberId);
 
+    @Update("update prepare_space_member set status='移除' where prepare_space_id=#{spaceId} and status='正常'")
+    Integer removeAllMembers(@Param("spaceId") Long spaceId);
+
     @Insert("insert into prepare_space_operation_log(prepare_space_id, account_id, operation_type, operation_target, target_id, detail, created_at) " +
             "values(#{prepareSpaceId}, #{accountId}, #{operationType}, #{operationTarget}, #{targetId}, #{detail}, now())")
     @Options(useGeneratedKeys = true, keyProperty = "logId", keyColumn = "log_id")

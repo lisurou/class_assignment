@@ -327,7 +327,7 @@ public class PrepareSpaceContentService {
             List<MaterialFolder> allFolders = prepareSpaceContentMapper.findFolders(spaceId, module, module.equals(MODULE_MATERIAL) ? folder.getCategory() : null);
             List<Long> deleteOrder = collectPostOrderFolderIds(allFolders, folderId);
             for (Long id : deleteOrder) {
-                deleteFolderContent(spaceId, module, id);
+                deleteFolderContent(spaceId, module, id, accountId);
                 prepareSpaceContentMapper.deleteFolder(spaceId, module, id);
             }
             insertLog(spaceId, accountId, "删除", targetName, String.valueOf(folderId), "删除文件夹");
@@ -1144,16 +1144,25 @@ public class PrepareSpaceContentService {
                 .body(resource);
     }
 
-    private void deleteFolderContent(Long spaceId, String module, Long folderId) {
+    private void deleteFolderContent(Long spaceId, String module, Long folderId, String accountId) {
         if (MODULE_MATERIAL.equals(module)) {
-            deleteMaterialFolderContent(spaceId, folderId);
+            deleteMaterialFolderContent(spaceId, folderId, accountId);
             return;
         }
         if (MODULE_COURSEWARE.equals(module)) {
+            List<Courseware> coursewares = prepareSpaceContentMapper.findCoursewaresByFolder(spaceId, folderId);
+            for (Courseware courseware : coursewares) {
+                insertLog(spaceId, accountId, "删除", "互动课件",
+                        String.valueOf(courseware.getCoursewareId()), "删除互动课件：" + courseware.getTitle());
+            }
             prepareSpaceContentMapper.deleteCoursewareByFolder(spaceId, folderId);
             return;
         }
         if (MODULE_TOPIC.equals(module)) {
+            List<Topic> topics = prepareSpaceContentMapper.findTopicsByFolder(spaceId, folderId);
+            for (Topic topic : topics) {
+                insertLog(spaceId, accountId, "删除", "话题", topic.getTopicId(), "删除话题：" + topic.getTitle());
+            }
             prepareSpaceContentMapper.deleteTopicsByFolder(spaceId, folderId);
             return;
         }
@@ -1161,6 +1170,7 @@ public class PrepareSpaceContentService {
             List<Assignment> assignments = prepareSpaceContentMapper.findAssignmentsByFolder(spaceId, folderId);
             for (Assignment assignment : assignments) {
                 if (assignment.getAssignmentId() != null) {
+                    insertLog(spaceId, accountId, "删除", "作业", assignment.getAssignmentId(), "删除作业：" + assignment.getTitle());
                     prepareSpaceContentMapper.deleteAssignmentSubmissionsByAssignment(spaceId, assignment.getAssignmentId());
                     prepareSpaceContentMapper.deleteAssignment(spaceId, assignment.getAssignmentId());
                 }
@@ -1168,14 +1178,18 @@ public class PrepareSpaceContentService {
         }
     }
 
-    private void deleteMaterialFolderContent(Long spaceId, Long folderId) {
+    private void deleteMaterialFolderContent(Long spaceId, Long folderId, String accountId) {
         List<MaterialAttachment> attachments = prepareSpaceContentMapper.findMaterialAttachmentsByFolder(spaceId, folderId);
         for (MaterialAttachment attachment : attachments) {
+            insertLog(spaceId, accountId, "删除", "资料附件",
+                    String.valueOf(attachment.getAttachmentId()), "删除附件：" + attachment.getOriginalName());
             deletePhysicalFile(attachment.getRelativePath());
             prepareSpaceContentMapper.deleteMaterialAttachment(spaceId, attachment.getAttachmentId());
         }
         List<MaterialLink> links = prepareSpaceContentMapper.findMaterialLinksByFolder(spaceId, folderId);
         for (MaterialLink link : links) {
+            insertLog(spaceId, accountId, "删除", "资料外链",
+                    String.valueOf(link.getLinkId()), "删除外链：" + link.getTitle());
             prepareSpaceContentMapper.deleteMaterialLink(spaceId, link.getLinkId());
         }
     }
