@@ -35,6 +35,7 @@ public class AccountService implements AccountServiceInterface {
     private final Path uploadRoot = Paths.get(System.getProperty("user.dir"), "uploads", "assignments");
     private final Path assignmentResourceRoot = Paths.get(System.getProperty("user.dir"), "uploads", "assignment-resources");
     private final Path avatarRoot = Paths.get(System.getProperty("user.dir"), "uploads", "avatars");
+    private final Path bannerRoot = Paths.get(System.getProperty("user.dir"), "uploads", "banners");
 
     @Autowired
     private AccountMapper accountMapper;
@@ -78,6 +79,7 @@ public class AccountService implements AccountServiceInterface {
         dropColumnIfExists("course", "teacher");
         normalizeCourseRelationshipData();
         dropColumnIfExists("course", "number");
+        ensureColumnExists("course", "banner_stored_name", "varchar(255) null");
     }
 
     private void ensureColumnExists(String tableName, String columnName, String columnDefinition) {
@@ -473,7 +475,9 @@ public class AccountService implements AccountServiceInterface {
 
     @Override
     public Course findByCourseId(String id) {
-        return accountMapper.findByCourseId(id);
+        Course course = accountMapper.findByCourseId(id);
+        enrichCourseBanner(course);
+        return course;
     }
 
     @Override
@@ -1369,6 +1373,108 @@ public class AccountService implements AccountServiceInterface {
         return avatarRoot.resolve(accountId);
     }
 
+    private Path getCourseBannerDirectory(String courseId) {
+        return bannerRoot.resolve(courseId);
+    }
+
+    @Override
+    public Result uploadCourseBanner(String courseId, MultipartFile file) {
+        Result result = new Result();
+        try {
+            if (courseId == null || courseId.isBlank()) {
+                result.setSuccess(false);
+                result.setMessage("课程ID不能为空");
+                return result;
+            }
+            if (file == null || file.isEmpty()) {
+                result.setSuccess(false);
+                result.setMessage("请选择横幅图片");
+                return result;
+            }
+            String contentType = file.getContentType();
+            if (contentType == null || !contentType.toLowerCase(Locale.ROOT).startsWith("image/")) {
+                result.setSuccess(false);
+                result.setMessage("横幅仅支持图片格式");
+                return result;
+            }
+
+            Path bannerDirectory = getCourseBannerDirectory(courseId);
+            Files.createDirectories(bannerDirectory);
+            clearExistingSubmissionFiles(bannerDirectory);
+
+            String originalFilename = Paths.get(Objects.requireNonNullElse(file.getOriginalFilename(), "banner-image")).getFileName().toString();
+            String extension = "";
+            int dotIndex = originalFilename.lastIndexOf('.');
+            if (dotIndex >= 0) {
+                extension = originalFilename.substring(dotIndex);
+            }
+            String storedName = UUID.randomUUID() + extension;
+            Path targetFile = bannerDirectory.resolve(storedName);
+            try (InputStream inputStream = file.getInputStream()) {
+                Files.copy(inputStream, targetFile, StandardCopyOption.REPLACE_EXISTING);
+            }
+
+            accountMapper.updateCourseBannerStoredName(courseId, storedName);
+
+            result.setSuccess(true);
+            result.setMessage("课程横幅更新成功");
+            Course course = findByCourseId(courseId);
+            if (course != null) {
+                course.setBannerStoredName(storedName);
+            }
+            result.setCourse(course);
+        } catch (Exception e) {
+            result.setSuccess(false);
+            result.setMessage("课程横幅更新失败：" + e.getMessage());
+        }
+        return result;
+    }
+
+    @Override
+    public Resource loadCourseBanner(String courseId) throws IOException {
+        String storedName = accountMapper.findCourseBannerStoredName(courseId);
+        if (storedName == null || storedName.isBlank()) {
+            return null;
+        }
+        Path targetFile = getCourseBannerDirectory(courseId).resolve(storedName);
+        if (!Files.exists(targetFile)) {
+            return null;
+        }
+        try {
+            return new UrlResource(targetFile.toUri());
+        } catch (MalformedURLException e) {
+            return null;
+        }
+    }
+
+    @Override
+    public Result deleteCourseBanner(String courseId) {
+        Result result = new Result();
+        try {
+            if (courseId == null || courseId.isBlank()) {
+                result.setSuccess(false);
+                result.setMessage("课程ID不能为空");
+                return result;
+            }
+            Path bannerDirectory = getCourseBannerDirectory(courseId);
+            if (Files.exists(bannerDirectory)) {
+                try (DirectoryStream<Path> stream = Files.newDirectoryStream(bannerDirectory)) {
+                    for (Path path : stream) {
+                        Files.deleteIfExists(path);
+                    }
+                }
+                Files.deleteIfExists(bannerDirectory);
+            }
+            accountMapper.updateCourseBannerStoredName(courseId, null);
+            result.setSuccess(true);
+            result.setMessage("课程横幅已恢复默认");
+        } catch (Exception e) {
+            result.setSuccess(false);
+            result.setMessage("课程横幅恢复失败：" + e.getMessage());
+        }
+        return result;
+    }
+
     private Assignment readAssignmentResourceMeta(String id, String assignmentId) throws IOException {
         if (id == null || assignmentId == null) {
             return null;
@@ -1418,6 +1524,23 @@ public class AccountService implements AccountServiceInterface {
             return;
         }
         account.setAvatarUrl("http://localhost:8080/account-avatar/" + account.getAccountId() + "?t=" + System.currentTimeMillis());
+    }
+
+    private void enrichCourseBanner(Course course) {
+        if (course == null) {
+            return;
+        }
+        String storedName = course.getBannerStoredName();
+        if (storedName == null || storedName.isBlank()) {
+            course.setBannerUrl(null);
+            return;
+        }
+        Path targetFile = getCourseBannerDirectory(course.getId()).resolve(storedName);
+        if (!Files.exists(targetFile)) {
+            course.setBannerUrl(null);
+            return;
+        }
+        course.setBannerUrl("http://localhost:8080/course-banner/" + course.getId() + "?t=" + System.currentTimeMillis());
     }
 
     private String storeAccountAvatar(String accountId, MultipartFile file) throws IOException {

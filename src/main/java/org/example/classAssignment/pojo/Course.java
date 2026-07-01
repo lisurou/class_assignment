@@ -14,4 +14,6 @@ public class Course {
     private String teacher;          // 展示用老师姓名，通过 accountId 关联查询
     private String archivedBy;      // 归档者（teacher或student的accountId）
     private String archivedAt;      // 归档时间
+    private String bannerStoredName; // 课程横幅存储文件名
+    private String bannerUrl;       // 课程横幅访问URL
 }
