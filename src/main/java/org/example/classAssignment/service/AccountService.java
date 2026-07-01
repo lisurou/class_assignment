@@ -23,6 +23,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @Service
@@ -551,6 +555,13 @@ public class AccountService implements AccountServiceInterface {
     public Result updateAssignment(String accountId, String id, String assignmentId, String assignmentContent, MultipartFile file) {
         Result result = new Result();
         try {
+            Assignment currentAssignment = loadSingleAssignment(accountId, id, assignmentId);
+            if (isAssignmentDeadlinePassed(currentAssignment)) {
+                result.setSuccess(false);
+                result.setMessage("已超过作业截止时间，不能再提交");
+                result.setAssignment(currentAssignment);
+                return result;
+            }
             storeAssignmentFile(accountId, id, assignmentId, file);
             if (accountMapper.updateAssignment(accountId, id, assignmentId, assignmentContent) && accountMapper.updateSubmit(accountId, id, assignmentId, "已提交")) {
                 Assignment updatedAssignment = loadSingleAssignment(accountId, id, assignmentId);
@@ -633,6 +644,12 @@ public class AccountService implements AccountServiceInterface {
     public Result insertAssignments(String accountIdNull, String id, Assignment assignment, MultipartFile file) {
         Result result = new Result();
         try {
+            String scheduleValidationMessage = validateAssignmentSchedule(assignment);
+            if (scheduleValidationMessage != null) {
+                result.setSuccess(false);
+                result.setMessage(scheduleValidationMessage);
+                return result;
+            }
             //生成一个不重复的作业码
             String randomCourseCode = generateRandomCourseCode();
             //确保生成的作业码为新
@@ -670,6 +687,12 @@ public class AccountService implements AccountServiceInterface {
     public Result updateCourseAssignment(String id, String assignmentId, Assignment assignment, MultipartFile file, Boolean removeAttachment) {
         Result result = new Result();
         try {
+            String scheduleValidationMessage = validateAssignmentSchedule(assignment);
+            if (scheduleValidationMessage != null) {
+                result.setSuccess(false);
+                result.setMessage(scheduleValidationMessage);
+                return result;
+            }
             boolean updated = accountMapper.updateCourseAssignment(
                     id,
                     assignmentId,
@@ -1091,6 +1114,60 @@ public class AccountService implements AccountServiceInterface {
                 }
                 return assignment;
             }
+        }
+        return null;
+    }
+
+    private boolean isAssignmentDeadlinePassed(Assignment assignment) {
+        if (assignment == null) {
+            return false;
+        }
+        LocalDateTime deadlineTime = parseAssignmentDateTime(assignment.getDeadline());
+        if (deadlineTime == null) {
+            return false;
+        }
+        return LocalDateTime.now().isAfter(deadlineTime);
+    }
+
+    private String validateAssignmentSchedule(Assignment assignment) {
+        if (assignment == null) {
+            return null;
+        }
+        LocalDateTime publishTime = parseAssignmentDateTime(assignment.getPublishTime());
+        LocalDateTime deadlineTime = parseAssignmentDateTime(assignment.getDeadline());
+        if (publishTime != null && deadlineTime != null && deadlineTime.isBefore(publishTime)) {
+            return "截止日期不能小于发布日期";
+        }
+        return null;
+    }
+
+    private LocalDateTime parseAssignmentDateTime(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim();
+        if (normalized.isEmpty() || "暂无".equals(normalized) || "待发布".equals(normalized)) {
+            return null;
+        }
+        normalized = normalized.replace('/', '-');
+        List<DateTimeFormatter> formatters = List.of(
+                DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"),
+                DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+        );
+        for (DateTimeFormatter formatter : formatters) {
+            try {
+                return LocalDateTime.parse(normalized, formatter);
+            } catch (Exception ignored) {
+            }
+        }
+        try {
+            return LocalDateTime.parse(normalized.replace('T', ' ').substring(0, Math.min(normalized.length(), 19)),
+                    DateTimeFormatter.ofPattern(normalized.length() >= 19 ? "yyyy-MM-dd HH:mm:ss" : "yyyy-MM-dd HH:mm"));
+        } catch (Exception ignored) {
+        }
+        try {
+            return OffsetDateTime.parse(normalized).atZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime();
+        } catch (Exception ignored) {
         }
         return null;
     }
