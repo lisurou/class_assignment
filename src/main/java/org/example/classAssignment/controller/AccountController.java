@@ -570,6 +570,40 @@ public class AccountController {
                 .body(resource);
     }
 
+    @PostMapping("/upload-course-banner")
+    public Result uploadCourseBanner(
+            @RequestParam("courseId") String courseId,
+            @RequestPart("file") MultipartFile file
+    ) {
+        return accountService.uploadCourseBanner(courseId, file);
+    }
+
+    @PostMapping("/delete-course-banner")
+    public Result deleteCourseBanner(@RequestBody Map<String, String> body) {
+        String courseId = body.get("courseId");
+        return accountService.deleteCourseBanner(courseId);
+    }
+
+    @GetMapping("/course-banner/{courseId}")
+    public ResponseEntity<Resource> getCourseBanner(@PathVariable("courseId") String courseId) throws IOException {
+        Resource resource = accountService.loadCourseBanner(courseId);
+        if (resource == null || !resource.exists()) {
+            return ResponseEntity.notFound().build();
+        }
+        MediaType mediaType = MediaType.APPLICATION_OCTET_STREAM;
+        try {
+            String contentType = resource.getFile() == null ? null : java.nio.file.Files.probeContentType(resource.getFile().toPath());
+            if (contentType != null && !contentType.isBlank()) {
+                mediaType = MediaType.parseMediaType(contentType);
+            }
+        } catch (Exception ignored) {
+        }
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate, max-age=0")
+                .contentType(mediaType)
+                .body(resource);
+    }
+
     @GetMapping("/course-members")
     public Result getCourseMembers(@RequestParam("courseId") String courseId) {
         return accountService.getCourseMembers(courseId);

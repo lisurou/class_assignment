@@ -68,4 +68,10 @@ public interface AccountServiceInterface {
     Resource loadAssignmentResource(String id, String assignmentId) throws IOException;
     Assignment getAssignmentResourceMeta(String id, String assignmentId);
     Resource loadAccountAvatar(String accountId) throws IOException;
+
+    Result uploadCourseBanner(String courseId, MultipartFile file);
+
+    Resource loadCourseBanner(String courseId) throws IOException;
+
+    Result deleteCourseBanner(String courseId);
 }

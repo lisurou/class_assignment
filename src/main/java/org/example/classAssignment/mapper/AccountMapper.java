@@ -50,7 +50,7 @@ public interface AccountMapper {
 
     @Select("select c.account_id as accountId, c.id, c.name, c.students, c.classes, c.time, " +
             "case when c.students is null or c.students = '' then 0 else length(c.students) - length(replace(c.students, ',', '')) + 1 end as number, " +
-            "a.name as teacher, c.archived_by as archivedBy, c.archived_at as archivedAt " +
+            "a.name as teacher, c.archived_by as archivedBy, c.archived_at as archivedAt, c.banner_stored_name as bannerStoredName " +
             "from course c left join account a on c.account_id = a.account_id where c.id=#{id}")
     Course findByCourseId(String id);
 
@@ -131,6 +131,12 @@ public interface AccountMapper {
     Boolean clearAssignmentAiReview(String id, String assignmentId);
     @Update("update course set students=#{students} where id=#{id}")
     Boolean updateStudents( String students,String id);
+
+    @Update("update course set banner_stored_name=#{bannerStoredName} where id=#{courseId}")
+    Boolean updateCourseBannerStoredName(String courseId, String bannerStoredName);
+
+    @Select("select banner_stored_name from course where id=#{courseId}")
+    String findCourseBannerStoredName(String courseId);
 
     @Insert("insert into course_notification(account_id, course_id, assignment_id, type, title, content, sender_name, read_status, created_at) " +
             "values(#{accountId}, #{courseId}, #{assignmentId}, #{type}, #{title}, #{content}, #{senderName}, #{readStatus}, now())")
