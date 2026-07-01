@@ -102,17 +102,17 @@ public interface AccountMapper {
     Integer updateScore(Integer score,String teacherComment,String accountId,String id,String assignmentId);
     @Select("Select students from course where id=#{id}")
     String findStudents(String id);
-    @Insert("insert into asssignment(account_id,id,assignment_id,title, deadline, assignment_type, content, total_score, ai_enabled) " +
-            "values(#{accountId},#{id},#{assignmentId},#{title}, #{deadline}, #{assignmentType}, #{content}, #{totalScore}, #{aiEnabled})")
-    Boolean insertAssignment(String accountId, String id, String assignmentId, String title, String deadline, String assignmentType, String content, Integer totalScore, Boolean aiEnabled);
-    @Update("update asssignment set title=#{title}, deadline=#{deadline}, assignment_type=#{assignmentType}, content=#{content}, total_score=#{totalScore}, ai_enabled=#{aiEnabled} " +
+    @Insert("insert into asssignment(account_id,id,assignment_id,title, publish_time, deadline, assignment_type, content, total_score, ai_enabled) " +
+            "values(#{accountId},#{id},#{assignmentId},#{title}, #{publishTime}, #{deadline}, #{assignmentType}, #{content}, #{totalScore}, #{aiEnabled})")
+    Boolean insertAssignment(String accountId, String id, String assignmentId, String title, String publishTime, String deadline, String assignmentType, String content, Integer totalScore, Boolean aiEnabled);
+    @Update("update asssignment set title=#{title}, publish_time=#{publishTime}, deadline=#{deadline}, assignment_type=#{assignmentType}, content=#{content}, total_score=#{totalScore}, ai_enabled=#{aiEnabled} " +
             "where id=#{id} and assignment_id=#{assignmentId}")
-    Boolean updateCourseAssignment(String id, String assignmentId, String title, String deadline, String assignmentType, String content, Integer totalScore, Boolean aiEnabled);
+    Boolean updateCourseAssignment(String id, String assignmentId, String title, String publishTime, String deadline, String assignmentType, String content, Integer totalScore, Boolean aiEnabled);
     @Delete("delete from asssignment where id=#{id} and assignment_id=#{assignmentId}")
     Boolean deleteCourseAssignment(String id, String assignmentId);
     @Select("select * from asssignment where assignment_id=#{assignmentId}")
     Boolean findByAssignmentId(String assignmentId);
-    @Select("select a.assignment_id as assignmentId, a.id, max(a.title) as title, max(a.deadline) as deadline, " +
+    @Select("select a.assignment_id as assignmentId, a.id, max(a.title) as title, max(a.publish_time) as publishTime, max(a.deadline) as deadline, " +
             "max(a.assignment_type) as assignmentType, max(a.content) as content, max(a.total_score) as totalScore, " +
             "max(a.ai_enabled) as aiEnabled, " +
             "sum(case when ac.identity='学生' and a.correct='已批改' then 1 else 0 end) as correctedCount, " +

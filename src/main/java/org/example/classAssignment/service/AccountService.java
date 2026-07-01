@@ -68,6 +68,8 @@ public class AccountService implements AccountServiceInterface {
         ensureColumnExists("course", "account_id", "varchar(64) null");
         ensureColumnExists("account", "avatar_stored_name", "varchar(255) null");
         ensureColumnExists("asssignment", "teacher_comment", "text null");
+        ensureColumnExists("asssignment", "publish_time", "varchar(64) null");
+        normalizeExistingAssignmentPublishTime();
         migrateCourseTeacherToAccountId();
         dropColumnIfExists("course", "teacher");
         normalizeCourseRelationshipData();
@@ -121,6 +123,25 @@ public class AccountService implements AccountServiceInterface {
                         "left join account a on a.name = c.teacher and a.identity = '老师' " +
                         "set c.account_id = coalesce(c.account_id, a.account_id) " +
                         "where (c.account_id is null or c.account_id = '') and c.teacher is not null and c.teacher <> ''"
+        );
+    }
+
+    private void normalizeExistingAssignmentPublishTime() {
+        jdbcTemplate.execute(
+                "update asssignment " +
+                        "set publish_time = case " +
+                        "when deadline is not null and deadline <> '' then deadline " +
+                        "else date_format(now(), '%Y-%m-%d %H:%i') end " +
+                        "where (publish_time is null or publish_time = '') " +
+                        "and exists (" +
+                        "select 1 from course c " +
+                        "where c.id = asssignment.id " +
+                        "and (" +
+                        "asssignment.account_id <> c.account_id " +
+                        "or (asssignment.submit is not null and asssignment.submit <> '') " +
+                        "or (asssignment.correct is not null and asssignment.correct <> '')" +
+                        ")" +
+                        ")"
         );
     }
 
@@ -620,20 +641,18 @@ public class AccountService implements AccountServiceInterface {
             }
             //取出课程中的所有账号
             String accountIds = findStudents(id);
-            accountMapper.insertAssignment(accountIdNull, id, randomCourseCode, assignment.getTitle(), assignment.getDeadline()
+            accountMapper.insertAssignment(accountIdNull, id, randomCourseCode, assignment.getTitle(), assignment.getPublishTime(), assignment.getDeadline()
                     , assignment.getAssignmentType(), assignment.getContent(), assignment.getTotalScore(), assignment.getAiEnabled());
-            if (accountIds != null) {
+            if (assignment.getPublishTime() != null && !assignment.getPublishTime().isBlank() && accountIds != null) {
                 String[] accountIdArr = accountIds.split(",");
                 for (int i = 0; i < accountIdArr.length; i++) {
                     String accountId = accountIdArr[i];
                     if (accountId == null || accountId.isBlank()) {
                         continue;
                     }
-                    accountMapper.insertAssignment(accountId, id, randomCourseCode, assignment.getTitle(), assignment.getDeadline()
+                    accountMapper.insertAssignment(accountId, id, randomCourseCode, assignment.getTitle(), assignment.getPublishTime(), assignment.getDeadline()
                             , assignment.getAssignmentType(), assignment.getContent(), assignment.getTotalScore(), assignment.getAiEnabled());
-                    if (assignment.getPublishTime() != null && !assignment.getPublishTime().isBlank()) {
-                        createNotificationForPublishedAssignment(accountId, id, randomCourseCode, assignment.getTitle(), accountIdNull);
-                    }
+                    createNotificationForPublishedAssignment(accountId, id, randomCourseCode, assignment.getTitle(), accountIdNull);
                 }
             }
             storeAssignmentResource(id, randomCourseCode, file);
@@ -655,6 +674,7 @@ public class AccountService implements AccountServiceInterface {
                     id,
                     assignmentId,
                     assignment.getTitle(),
+                    assignment.getPublishTime(),
                     assignment.getDeadline(),
                     assignment.getAssignmentType(),
                     assignment.getContent(),
@@ -666,6 +686,9 @@ public class AccountService implements AccountServiceInterface {
             }
             if (file != null && !file.isEmpty()) {
                 storeAssignmentResource(id, assignmentId, file);
+            }
+            if (assignment.getPublishTime() != null && !assignment.getPublishTime().isBlank()) {
+                distributePublishedAssignmentToStudents(id, assignmentId, assignment);
             }
             result.setSuccess(updated);
             result.setMessage(updated ? "作业更新成功" : "作业更新失败");
@@ -858,6 +881,9 @@ public class AccountService implements AccountServiceInterface {
             if (assignment == null || assignment.getAssignmentId() == null) {
                 continue;
             }
+            if (assignment.getPublishTime() == null || assignment.getPublishTime().isBlank()) {
+                continue;
+            }
             if (existingAssignmentIds.contains(assignment.getAssignmentId())) {
                 continue;
             }
@@ -870,12 +896,46 @@ public class AccountService implements AccountServiceInterface {
                     id,
                     assignment.getAssignmentId(),
                     assignment.getTitle(),
+                    assignment.getPublishTime(),
                     assignment.getDeadline(),
                     assignment.getAssignmentType(),
                     assignment.getContent(),
                     assignment.getTotalScore(),
                     assignment.getAiEnabled()
             );
+        }
+    }
+
+    private void distributePublishedAssignmentToStudents(String courseId, String assignmentId, Assignment assignment) {
+        String studentIds = findStudents(courseId);
+        if (studentIds == null || studentIds.isBlank()) {
+            return;
+        }
+        Course course = accountMapper.findByCourseId(courseId);
+        String teacherAccountId = course == null ? null : course.getAccountId();
+        for (String accountId : studentIds.split(",")) {
+            if (accountId == null || accountId.isBlank()) {
+                continue;
+            }
+            Integer count = accountMapper.countAssignmentByStudent(accountId, courseId, assignmentId);
+            if (count != null && count > 0) {
+                continue;
+            }
+            accountMapper.insertAssignment(
+                    accountId,
+                    courseId,
+                    assignmentId,
+                    assignment.getTitle(),
+                    assignment.getPublishTime(),
+                    assignment.getDeadline(),
+                    assignment.getAssignmentType(),
+                    assignment.getContent(),
+                    assignment.getTotalScore(),
+                    assignment.getAiEnabled()
+            );
+            if (teacherAccountId != null && !teacherAccountId.isBlank()) {
+                createNotificationForPublishedAssignment(accountId, courseId, assignmentId, assignment.getTitle(), teacherAccountId);
+            }
         }
     }
 
