@@ -48,7 +48,10 @@ public interface AccountMapper {
     @Update("update account set name=#{name},student_id=#{studentId},school=#{school},major=#{major},classes=#{classes},grade=#{grade},enrollment=#{enrollment} where account_id=#{accountId}")
     Integer updateBasicInformation(Account account);
 
-    @Select("select * from course where id=#{id}")
+    @Select("select c.account_id as accountId, c.id, c.name, c.students, c.classes, c.time, " +
+            "case when c.students is null or c.students = '' then 0 else length(c.students) - length(replace(c.students, ',', '')) + 1 end as number, " +
+            "a.name as teacher, c.archived_by as archivedBy, c.archived_at as archivedAt " +
+            "from course c left join account a on c.account_id = a.account_id where c.id=#{id}")
     Course findByCourseId(String id);
 
     @Update("update account set learned=#{learned} where account_id=#{accountId}")
@@ -63,7 +66,7 @@ public interface AccountMapper {
     @Update("update account set taught=#{taught} where account_id=#{accountId}")
     Boolean updateTaught(String accountId, String taught);
 
-    @Insert("insert into course(time,name,classes,id,number,teacher) values(#{time},#{name},#{classes},#{id},#{number},#{teacher})")
+    @Insert("insert into course(account_id,time,name,classes,id) values(#{accountId},#{time},#{name},#{classes},#{id})")
     Boolean insertCourse(Course course);
 
     @Select("select top from account where account_id=#{accountId}")
@@ -126,7 +129,7 @@ public interface AccountMapper {
     Boolean updateAssignmentAiReview(String accountId, String id, String assignmentId, Integer aiScore, String aiComment);
     @Update("update asssignment set ai_score=null, ai_comment=null where id=#{id} and assignment_id=#{assignmentId}")
     Boolean clearAssignmentAiReview(String id, String assignmentId);
-    @Update("update course set students=#{students}where id=#{id}")
+    @Update("update course set students=#{students} where id=#{id}")
     Boolean updateStudents( String students,String id);
 
     @Insert("insert into course_notification(account_id, course_id, assignment_id, type, title, content, sender_name, read_status, created_at) " +

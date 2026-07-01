@@ -65,8 +65,13 @@ public class AccountService implements AccountServiceInterface {
                 "created_at datetime default current_timestamp, " +
                 "primary key(course_id, assignment_id)" +
                 ")");
+        ensureColumnExists("course", "account_id", "varchar(64) null");
         ensureColumnExists("account", "avatar_stored_name", "varchar(255) null");
         ensureColumnExists("asssignment", "teacher_comment", "text null");
+        migrateCourseTeacherToAccountId();
+        dropColumnIfExists("course", "teacher");
+        normalizeCourseRelationshipData();
+        dropColumnIfExists("course", "number");
     }
 
     private void ensureColumnExists(String tableName, String columnName, String columnDefinition) {
@@ -86,6 +91,278 @@ public class AccountService implements AccountServiceInterface {
                 columnName,
                 columnDefinition
         ));
+    }
+
+    private void dropColumnIfExists(String tableName, String columnName) {
+        Integer count = jdbcTemplate.queryForObject(
+                "select count(*) from information_schema.columns " +
+                        "where table_schema = database() and table_name = ? and column_name = ?",
+                Integer.class,
+                tableName,
+                columnName
+        );
+        if (count == null || count <= 0) {
+            return;
+        }
+        jdbcTemplate.execute(String.format("alter table %s drop column %s", tableName, columnName));
+    }
+
+    private void migrateCourseTeacherToAccountId() {
+        Integer teacherColumnCount = jdbcTemplate.queryForObject(
+                "select count(*) from information_schema.columns " +
+                        "where table_schema = database() and table_name = 'course' and column_name = 'teacher'",
+                Integer.class
+        );
+        if (teacherColumnCount == null || teacherColumnCount <= 0) {
+            return;
+        }
+        jdbcTemplate.execute(
+                "update course c " +
+                        "left join account a on a.name = c.teacher and a.identity = '老师' " +
+                        "set c.account_id = coalesce(c.account_id, a.account_id) " +
+                        "where (c.account_id is null or c.account_id = '') and c.teacher is not null and c.teacher <> ''"
+        );
+    }
+
+    private void normalizeCourseRelationshipData() {
+        List<Map<String, Object>> accountRows = jdbcTemplate.queryForList(
+                "select account_id, identity, learned, taught, top, archived_learned, archived_taught from account"
+        );
+        List<Map<String, Object>> courseRows = jdbcTemplate.queryForList(
+                "select id, account_id, students from course"
+        );
+
+        Set<String> validCourseIds = new LinkedHashSet<>();
+        Set<String> validStudentIds = new LinkedHashSet<>();
+        Map<String, String> courseOwnerMap = new LinkedHashMap<>();
+        Map<String, LinkedHashSet<String>> courseStudentsMap = new LinkedHashMap<>();
+
+        for (Map<String, Object> courseRow : courseRows) {
+            String courseId = toSafeString(courseRow.get("id"));
+            if (courseId == null) {
+                continue;
+            }
+            validCourseIds.add(courseId);
+            courseOwnerMap.put(courseId, toSafeString(courseRow.get("account_id")));
+        }
+
+        for (Map<String, Object> accountRow : accountRows) {
+            String accountId = toSafeString(accountRow.get("account_id"));
+            String identity = toSafeString(accountRow.get("identity"));
+            if (accountId != null && "学生".equals(identity)) {
+                validStudentIds.add(accountId);
+            }
+        }
+
+        for (Map<String, Object> courseRow : courseRows) {
+            String courseId = toSafeString(courseRow.get("id"));
+            if (courseId == null) {
+                continue;
+            }
+            LinkedHashSet<String> normalizedStudents = normalizeIdSet(courseRow.get("students"), validStudentIds);
+            courseStudentsMap.put(courseId, normalizedStudents);
+        }
+
+        for (Map<String, Object> accountRow : accountRows) {
+            String accountId = toSafeString(accountRow.get("account_id"));
+            String identity = toSafeString(accountRow.get("identity"));
+            if (accountId == null) {
+                continue;
+            }
+
+            if ("学生".equals(identity)) {
+                LinkedHashSet<String> learnedSet = normalizeIdSet(accountRow.get("learned"), validCourseIds);
+                LinkedHashSet<String> archivedLearnedSet = normalizeIdSet(accountRow.get("archived_learned"), validCourseIds);
+
+                // 已归档课程不应再出现在激活课程列表中
+                learnedSet.removeAll(archivedLearnedSet);
+
+                for (Map.Entry<String, LinkedHashSet<String>> entry : courseStudentsMap.entrySet()) {
+                    if (!entry.getValue().contains(accountId)) {
+                        continue;
+                    }
+                    String courseId = entry.getKey();
+                    if (!learnedSet.contains(courseId) && !archivedLearnedSet.contains(courseId)) {
+                        learnedSet.add(courseId);
+                    }
+                }
+
+                for (String courseId : learnedSet) {
+                    courseStudentsMap.computeIfAbsent(courseId, key -> new LinkedHashSet<>()).add(accountId);
+                }
+                for (String courseId : archivedLearnedSet) {
+                    courseStudentsMap.computeIfAbsent(courseId, key -> new LinkedHashSet<>()).add(accountId);
+                }
+
+                LinkedHashSet<String> topSet = normalizeIdSet(accountRow.get("top"), validCourseIds);
+                topSet.retainAll(learnedSet);
+
+                updateAccountCourseColumnsIfChanged(
+                        accountId,
+                        accountRow.get("learned"),
+                        joinIds(learnedSet),
+                        accountRow.get("archived_learned"),
+                        joinIds(archivedLearnedSet),
+                        accountRow.get("taught"),
+                        null,
+                        accountRow.get("archived_taught"),
+                        null,
+                        accountRow.get("top"),
+                        joinIds(topSet)
+                );
+                continue;
+            }
+
+            if ("老师".equals(identity)) {
+                LinkedHashSet<String> taughtSet = normalizeIdSet(accountRow.get("taught"), validCourseIds);
+                LinkedHashSet<String> archivedTaughtSet = normalizeIdSet(accountRow.get("archived_taught"), validCourseIds);
+                taughtSet.removeAll(archivedTaughtSet);
+
+                for (Map.Entry<String, String> entry : courseOwnerMap.entrySet()) {
+                    if (!Objects.equals(accountId, entry.getValue())) {
+                        continue;
+                    }
+                    String courseId = entry.getKey();
+                    if (!taughtSet.contains(courseId) && !archivedTaughtSet.contains(courseId)) {
+                        taughtSet.add(courseId);
+                    }
+                }
+
+                LinkedHashSet<String> topSet = normalizeIdSet(accountRow.get("top"), validCourseIds);
+                topSet.retainAll(taughtSet);
+
+                updateAccountCourseColumnsIfChanged(
+                        accountId,
+                        accountRow.get("learned"),
+                        null,
+                        accountRow.get("archived_learned"),
+                        null,
+                        accountRow.get("taught"),
+                        joinIds(taughtSet),
+                        accountRow.get("archived_taught"),
+                        joinIds(archivedTaughtSet),
+                        accountRow.get("top"),
+                        joinIds(topSet)
+                );
+            }
+        }
+
+        for (Map<String, Object> courseRow : courseRows) {
+            String courseId = toSafeString(courseRow.get("id"));
+            if (courseId == null) {
+                continue;
+            }
+            LinkedHashSet<String> studentsSet = courseStudentsMap.getOrDefault(courseId, new LinkedHashSet<>());
+            String nextStudents = joinIds(studentsSet);
+            String currentStudents = emptyToNull(toSafeString(courseRow.get("students")));
+            if (!Objects.equals(currentStudents, nextStudents)) {
+                jdbcTemplate.update(
+                        "update course set students=? where id=?",
+                        nextStudents,
+                        courseId
+                );
+            }
+        }
+    }
+
+    private void updateAccountCourseColumnsIfChanged(
+            String accountId,
+            Object currentLearned,
+            String nextLearned,
+            Object currentArchivedLearned,
+            String nextArchivedLearned,
+            Object currentTaught,
+            String nextTaught,
+            Object currentArchivedTaught,
+            String nextArchivedTaught,
+            Object currentTop,
+            String nextTop
+    ) {
+        String normalizedCurrentLearned = emptyToNull(toSafeString(currentLearned));
+        String normalizedCurrentArchivedLearned = emptyToNull(toSafeString(currentArchivedLearned));
+        String normalizedCurrentTaught = emptyToNull(toSafeString(currentTaught));
+        String normalizedCurrentArchivedTaught = emptyToNull(toSafeString(currentArchivedTaught));
+        String normalizedCurrentTop = emptyToNull(toSafeString(currentTop));
+
+        String finalLearned = nextLearned == null ? normalizedCurrentLearned : nextLearned;
+        String finalArchivedLearned = nextArchivedLearned == null ? normalizedCurrentArchivedLearned : nextArchivedLearned;
+        String finalTaught = nextTaught == null ? normalizedCurrentTaught : nextTaught;
+        String finalArchivedTaught = nextArchivedTaught == null ? normalizedCurrentArchivedTaught : nextArchivedTaught;
+        String finalTop = nextTop == null ? normalizedCurrentTop : nextTop;
+
+        if (Objects.equals(normalizedCurrentLearned, finalLearned)
+                && Objects.equals(normalizedCurrentArchivedLearned, finalArchivedLearned)
+                && Objects.equals(normalizedCurrentTaught, finalTaught)
+                && Objects.equals(normalizedCurrentArchivedTaught, finalArchivedTaught)
+                && Objects.equals(normalizedCurrentTop, finalTop)) {
+            return;
+        }
+
+        jdbcTemplate.update(
+                "update account set learned=?, archived_learned=?, taught=?, archived_taught=?, top=? where account_id=?",
+                finalLearned,
+                finalArchivedLearned,
+                finalTaught,
+                finalArchivedTaught,
+                finalTop,
+                accountId
+        );
+    }
+
+    private LinkedHashSet<String> normalizeIdSet(Object rawValue, Set<String> allowedIds) {
+        LinkedHashSet<String> result = new LinkedHashSet<>();
+        String value = toSafeString(rawValue);
+        if (value == null) {
+            return result;
+        }
+        String[] parts = value.split(",");
+        for (String part : parts) {
+            String normalized = emptyToNull(part == null ? null : part.trim());
+            if (normalized == null) {
+                continue;
+            }
+            if (allowedIds != null && !allowedIds.contains(normalized)) {
+                continue;
+            }
+            result.add(normalized);
+        }
+        return result;
+    }
+
+    private String joinIds(LinkedHashSet<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return null;
+        }
+        return String.join(",", ids);
+    }
+
+    private String toSafeString(Object value) {
+        if (value == null) {
+            return null;
+        }
+        return String.valueOf(value);
+    }
+
+    private String emptyToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private Integer parseInteger(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return Integer.parseInt(String.valueOf(value).trim());
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     @Override
@@ -236,7 +513,7 @@ public class AccountService implements AccountServiceInterface {
             }
             enrichAssignmentsWithFileMeta(assignments);
             enrichAssignmentsWithResourceMeta(assignments);
-            Course course = accountMapper.findByCourseId(id);
+            Course course = findByCourseId(id);
             result.setSuccess(true);
             result.setMessage("作业成功展示");
             result.setCourse(course);

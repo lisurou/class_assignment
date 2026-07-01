@@ -297,11 +297,28 @@ public class AccountController {
         try {
             String accountId = request.getAccountId();
             Course course = request.getCourse();
+            if (accountId == null || accountId.isBlank() || course == null) {
+                result.setSuccess(false);
+                result.setMessage("课程创建参数不完整");
+                return result;
+            }
+            Account account = accountService.findByAccountId(accountId);
+            if (account == null) {
+                result.setSuccess(false);
+                result.setMessage("未找到当前账号");
+                return result;
+            }
+            if (!"老师".equals(account.getIdentity())) {
+                result.setSuccess(false);
+                result.setMessage("学生身份不能创建课程");
+                return result;
+            }
             String randomCourseCode = generateRandomCourseCode();
             while (accountService.findByCourseId(randomCourseCode) != null) {
                 randomCourseCode = generateRandomCourseCode();
             }
             course.setId(randomCourseCode);
+            course.setAccountId(accountId);
             String stringTaught = accountService.findTaught(accountId);
             String newStringTaught = appendId(stringTaught, randomCourseCode);
             if (accountService.insertCourse(course)) {
